@@ -1,99 +1,100 @@
-/**
- * Shape of the precomputed matchup files written by pipeline/run_matchups.py.
- * The page renders every table generically, so new sections (e.g. pass coverage) need no new types.
- */
+/** Shape of data/<season>/week-XX.json, written by pipeline/run_matchups.py. */
 
-export type CellFormat = 'int' | 'dec1' | 'epa' | 'pct' | 'edge' | 'text';
+export type Rank = [number, number]; // [rank, peer group size]; rank 1 = best for that unit
 
-export interface Column {
-  key: string;
-  label: string;
-  fmt: CellFormat;
-  /** Cells in this column may carry a [rank, peerGroupSize] pair. */
-  rank?: boolean;
-  title?: string;
+export interface Metrics {
+  att: number;
+  share?: number | null;
+  ypc: number | null;
+  epa: number | null;
+  sr: number | null;
+  expl: number | null;
+  stuff: number | null;
+  ranks: Partial<Record<'ypc' | 'epa' | 'sr' | 'expl' | 'stuff' | 'ybc_att' | 'yac_att', Rank>>;
 }
 
-export interface Row {
-  key: string;
-  label: string;
-  sub?: string;
-  /** team = the team being described; ref = league average; total = team total; qb = designed QB runs. */
-  kind: 'row' | 'team' | 'ref' | 'total' | 'qb';
-  group?: string;
-  /** Overlap tables: the largest mismatch each way. */
-  flag?: 'offense' | 'defense';
-  cells: Record<string, number | string | null>;
-  ranks: Record<string, [number, number]>;
+export interface Overall extends Metrics {
+  games: number | null;
+  ybc_att: number | null;
+  yac_att: number | null;
+  pfr_att: number | null;
+  qb_att: number | null;
 }
 
-export interface ReportTableData {
+export type SplitGroup = 'direction' | 'gap' | 'box';
+
+export interface Split {
+  group: SplitGroup;
+  key: string;
+  label: string;
+  off: Metrics;
+  def: Metrics;
+  /** 0-100, 50 = neutral; null when either side is below the rank qualifier. */
+  edge: number | null;
+}
+
+export interface Rusher {
   id: string;
-  title: string;
+  name: string;
+  /** Depth slot (RB1…), position, or the prior-season team(s). */
+  role: string;
+  kind: 'rb' | 'other' | 'qb' | 'total';
+  note?: string;
+  att: number;
+  carry_share?: number | null;
+  snap_share?: number | null;
+  ypc: number | null;
+  epa: number | null;
+  sr: number | null;
+  ybc_att: number | null;
+  yac_att: number | null;
+  pfr_att: number | null;
+  ranks: Metrics['ranks'];
+}
+
+export type BandKey = 'big_edge' | 'small_edge' | 'neutral' | 'small_disadvantage' | 'big_disadvantage';
+
+export interface SeasonBlock {
   season: number;
-  season_label: string;
-  caption: string;
-  unit?: 'offense' | 'defense' | 'matchup';
-  columns: Column[];
-  rows: Row[];
-  peer: string;
-  notes: string[];
+  weeks: number[];
+  overall: { off: Overall; def: Overall };
+  run_edge: number | null;
+  edge_coverage: number;
+  small_sample: boolean;
+  band: BandKey;
+  top_direction: { key: string; label: string; share: number; att: number } | null;
+  splits: Split[];
+  rushers: Rusher[];
   takeaways: string[];
-  checks?: Record<string, string>;
 }
 
-export interface Section {
-  id: string;
-  /** Which report the section belongs to ("run"; later e.g. "coverage"). */
-  group: string;
-  title: string;
-  subtitle?: string;
-  tables?: ReportTableData[];
-  /** Set instead of tables when there is no data (e.g. Week 1). */
-  empty?: string;
-}
-
-export interface Side {
+export interface MatchupRow {
+  game_id: string;
   offense: string;
   defense: string;
-  title: string;
-  sections: Section[];
+  home: boolean;
+  seasons: Record<string, SeasonBlock | null>;
 }
 
-export interface GameReport {
+export interface WeekReport {
   schema: number;
-  game_id: string;
   season: number;
   week: number;
-  away: string;
-  home: string;
-  gameday: string;
-  gametime: string | null;
-  stadium: string | null;
-  roof: string | null;
-  data_as_of: string | null;
   generated_at: string;
-  window: { current: { season: number; weeks: number[] }; prior: { season: number; weeks: number[] } };
-  sides: Side[];
+  data_as_of: string | null;
+  seasons: { season: number; label: string; weeks: number[]; current: boolean; empty: string | null }[];
+  games: { game_id: string; away: string; home: string; gameday: string; gametime: string | null; stadium: string | null }[];
+  rows: MatchupRow[];
+  edge: { bands: { key: BandKey; label: string; min: number }[]; min_coverage: number; definition: string };
   notes: string[];
   filters: string[];
-  qualifiers: Record<string, string>;
+  qualifiers: string[];
   sources: string[];
   checks: string[];
-}
-
-export interface IndexGame {
-  game_id: string;
-  away: string;
-  home: string;
-  gameday: string;
-  gametime: string | null;
-  path: string;
-  data_as_of: string | null;
 }
 
 export interface SeasonIndex {
   schema: number;
   season: number;
-  weeks: { week: number; games: IndexGame[] }[];
+  weeks: { week: number; games: number; first_gameday: string; path: string; data_as_of: string | null }[];
 }

@@ -1,4 +1,4 @@
-import type { CellFormat } from './types';
+export type CellFormat = 'int' | 'dec1' | 'epa' | 'pct' | 'text';
 
 export function formatCell(v: number | string | null | undefined, fmt: CellFormat): string {
   if (v == null || v === '') return '—';
@@ -9,7 +9,6 @@ export function formatCell(v: number | string | null | undefined, fmt: CellForma
     case 'dec1':
       return v.toFixed(1);
     case 'epa':
-    case 'edge':
       return `${v > 0 ? '+' : v < 0 ? '−' : ''}${Math.abs(v).toFixed(2)}`;
     case 'pct':
       return `${(v * 100).toFixed(0)}%`;
@@ -29,9 +28,4 @@ export function formatKickoff(t: string | null): string {
   if (!t) return 'TBD';
   const [h, m] = t.split(':').map(Number);
   return `${((h + 11) % 12) + 1}:${String(m).padStart(2, '0')} ${h >= 12 ? 'PM' : 'AM'} ET`;
-}
-
-export function weeksLabel(weeks: number[]): string {
-  if (!weeks.length) return 'no games yet';
-  return weeks.length === 1 ? `week ${weeks[0]}` : `weeks ${weeks[0]}–${weeks[weeks.length - 1]}`;
 }

@@ -101,13 +101,26 @@ def test_pct_from_rank():
 
 def test_check_report_catches_bad_shares_and_totals():
     def rep(shares, att_rows, total):
-        rows = [{"kind": "row", "cells": {"share": s}} for s in shares]
-        rrows = [{"kind": "row", "cells": {"att": a}} for a in att_rows] + [{"kind": "total", "cells": {"att": total}}]
-        tables = [{"id": "d", "checks": {"shares_sum_to_one": "share"}, "rows": rows}, {"id": "r", "checks": {"rows_sum_to_total": "att"}, "rows": rrows}]
-        return {"game_id": "g", "sides": [{"offense": "AAA", "sections": [{"tables": tables}]}]}
+        m = lambda sh: {"share": sh}  # noqa: E731
+        splits = [{"group": "direction", "off": m(sh), "def": m(sh)} for sh in shares]
+        rushers = [{"kind": "rb", "att": a} for a in att_rows] + [{"kind": "total", "att": total}]
+        return {"week": 3, "rows": [{"offense": "AAA", "defense": "BBB", "seasons": {"2026": {"splits": splits, "rushers": rushers}, "2025": None}}]}
 
     check_report(rep([0.5, 0.5], [3, 2], 5))
     with pytest.raises(ValidationError):
         check_report(rep([0.5, 0.4], [3, 2], 5))
     with pytest.raises(ValidationError):
         check_report(rep([0.5, 0.5], [3, 2], 6))
+
+
+def test_edge_formula_and_bands():
+    from matchups.weekly import band, edge_from
+
+    best, worst, mid = {"ranks": {"epa": [1, 32]}}, {"ranks": {"epa": [32, 32]}}, {"ranks": {"epa": [16, 31]}}
+    assert edge_from(best, worst) == 100  # best offense vs the leakiest defense
+    assert edge_from(worst, best) == 0
+    assert edge_from(mid, mid) == 50
+    assert edge_from(best, {"ranks": {}}) is None  # an unranked side gives no edge
+    assert [band(x) for x in (70, 69, 58, 57, 43, 42, 31, 30)] == [
+        "big_edge", "small_edge", "small_edge", "neutral", "neutral", "small_disadvantage", "small_disadvantage", "big_disadvantage"]
+    assert band(90, small_sample=True) == "neutral" and band(None) == "neutral"

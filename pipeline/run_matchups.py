@@ -5,8 +5,8 @@ Run Game Matchup Report pipeline.
     python pipeline/run_matchups.py --week 5     # one week
     python pipeline/run_matchups.py --all        # every week on the current-season schedule
 
-Pulls nflverse data with nflreadpy, computes every table, validates, and writes one JSON per game to
-data/<season>/week-XX/<game_id>.json plus data/<season>/index.json.
+Pulls nflverse data with nflreadpy, computes everything, validates, and writes one JSON per week to
+data/<season>/week-XX.json (every offense playing that week) plus data/<season>/index.json.
 """
 
 import argparse
@@ -20,8 +20,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from matchups import load  # noqa: E402
 from matchups.config import OUTPUT_DIR, SCHEMA_VERSION, SEASON_TYPE  # noqa: E402
-from matchups.report import game_report  # noqa: E402
 from matchups.validate import ValidationError, check_pbp_complete, check_report, reconcile_pfr, reconcile_removed, reconcile_team_totals  # noqa: E402
+from matchups.weekly import week_report  # noqa: E402
 from matchups.window import build_window, completed_weeks_before  # noqa: E402
 
 
@@ -41,19 +41,15 @@ def rb_depth(season: int, gameday: str, played: bool) -> dict[str, list[dict]]:
 def write_index(out: Path, season: int) -> Path:
     """Rebuild the season index from the files on disk, so single-week runs add to it."""
     root = out / str(season)
-    weeks: dict[int, list] = {}
-    for f in sorted(root.glob("week-*/*.json")):
-        g = json.loads(f.read_text())
-        weeks.setdefault(g["week"], []).append({
-            "game_id": g["game_id"], "away": g["away"], "home": g["home"], "gameday": g["gameday"], "gametime": g["gametime"],
+    weeks = []
+    for f in sorted(root.glob("week-*.json")):
+        r = json.loads(f.read_text())
+        weeks.append({
+            "week": r["week"], "games": len(r["games"]), "first_gameday": min(g["gameday"] for g in r["games"]),
             # Path as the site sees it (the site always bundles data/).
-            "path": f"data/{f.relative_to(out).as_posix()}", "data_as_of": g["data_as_of"],
+            "path": f"data/{f.relative_to(out).as_posix()}", "data_as_of": r["data_as_of"],
         })
-    idx = {
-        "schema": SCHEMA_VERSION,
-        "season": season,
-        "weeks": [{"week": w, "games": sorted(gs, key=lambda x: (x["gameday"], x["gametime"] or "", x["game_id"]))} for w, gs in sorted(weeks.items())],
-    }
+    idx = {"schema": SCHEMA_VERSION, "season": season, "weeks": sorted(weeks, key=lambda w: w["week"])}
     p = root / "index.json"
     p.write_text(json.dumps(idx, indent=1) + "\n")
     return p
@@ -105,18 +101,19 @@ def main() -> int:
             windows[tuple(weeks)] = (cur, checks)
         cur, checks = windows[tuple(weeks)]
         games = sched.filter(pl.col("week") == week).sort(["gameday", "gametime", "game_id"])
-        out_dir = args.out / str(season) / f"week-{week:02d}"
+        out_dir = args.out / str(season)
         out_dir.mkdir(parents=True, exist_ok=True)
-        for game in games.iter_rows(named=True):
-            depth = rb_depth(season, game["gameday"], game["result"] is not None)
-            rep = game_report(game, week, cur, prior, depth, checks + ["Report tables: direction/gap/box shares sum to 100%; rusher rows sum to the team total."])
-            check_report(rep)
-            (out_dir / f"{game['game_id']}.json").write_text(json.dumps(rep, indent=None, separators=(",", ":"), allow_nan=False) + "\n")
-            written += 1
-        print(f"  week {week}: {games.height} games, current-season window {weeks or 'none'}")
+        game_rows = list(games.iter_rows(named=True))
+        depth = {g["game_id"]: rb_depth(season, g["gameday"], g["result"] is not None) for g in game_rows}
+        rep = week_report(season, week, game_rows, cur, prior, depth,
+                          checks + ["Report: direction / gap / box shares sum to 100% for every offense and defense; rusher rows sum to the team total."])
+        check_report(rep)
+        (out_dir / f"week-{week:02d}.json").write_text(json.dumps(rep, indent=None, separators=(",", ":"), allow_nan=False) + "\n")
+        written += 1
+        print(f"  week {week}: {games.height} games, {len(rep['rows'])} run games, current-season window {weeks or 'none'}")
 
     idx = write_index(args.out, season)
-    print(f"Wrote {written} reports; index {idx}")
+    print(f"Wrote {written} week file{'s' if written != 1 else ''}; index {idx}")
     for c in dict.fromkeys(c for _cur, cs in windows.values() for c in cs):
         print("  ✓", c)
     return 0

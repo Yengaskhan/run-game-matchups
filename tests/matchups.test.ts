@@ -2,11 +2,11 @@ import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { formatCell, formatKickoff } from '../src/format';
-import type { GameReport, SeasonIndex } from '../src/types';
+import type { SeasonIndex, WeekReport } from '../src/types';
 
 /*
- * Checks every committed matchup report (data/). `npm run build` runs this, so a bad pipeline
- * output fails the deploy instead of reaching the site.
+ * Checks every committed week file (data/). `npm run build` runs this, so a bad pipeline output fails
+ * the deploy instead of reaching the site.
  */
 
 const ROOT = join(__dirname, '..');
@@ -16,67 +16,61 @@ const TOL = 1e-3; // values are rounded to 4 decimals in the JSON
 
 describe.each(seasons)('matchup reports %s', (season) => {
   const index = JSON.parse(readFileSync(join(DATA, season, 'index.json'), 'utf8')) as SeasonIndex;
-  const games = index.weeks.flatMap((w) => w.games.map((g) => ({ ...g, week: w.week })));
 
-  it('index lists every file and every file is in the index', () => {
-    const onDisk = readdirSync(join(DATA, season))
-      .filter((d) => d.startsWith('week-'))
-      .flatMap((d) => readdirSync(join(DATA, season, d)).map((f) => `data/${season}/${d}/${f}`));
-    expect(games.map((g) => g.path).sort()).toEqual(onDisk.sort());
+  it('index lists every week file and every file is in the index', () => {
+    const onDisk = readdirSync(join(DATA, season)).filter((f) => /^week-\d+\.json$/.test(f)).map((f) => `data/${season}/${f}`);
+    expect(index.weeks.map((w) => w.path).sort()).toEqual(onDisk.sort());
   });
 
-  it.each(games.map((g) => [g.game_id, g] as const))('%s', (_id, g) => {
-    const r = JSON.parse(readFileSync(join(ROOT, g.path), 'utf8')) as GameReport;
+  it.each(index.weeks.map((w) => [w.week, w] as const))('week %i', (_w, entry) => {
+    const r = JSON.parse(readFileSync(join(ROOT, entry.path), 'utf8')) as WeekReport;
     expect(r.schema).toBe(index.schema);
-    expect([r.game_id, r.week, r.away, r.home]).toEqual([g.game_id, g.week, g.away, g.home]);
-    // Current and prior seasons are separate windows, never blended.
-    expect(r.window.prior.season).toBe(r.season - 1);
-    expect(r.window.current.weeks.every((w) => w < r.week)).toBe(true);
-    expect(r.sides.map((s) => [s.offense, s.defense])).toEqual([
-      [r.away, r.home],
-      [r.home, r.away],
-    ]);
+    expect(r.week).toBe(entry.week);
+    expect(r.games.length).toBe(entry.games);
 
-    for (const side of r.sides) {
-      expect(side.sections.map((s) => s.id)).toEqual(['defense', 'offense', 'overlap', 'rushers', 'prior']);
-      for (const sec of side.sections) {
-        expect(!!sec.empty !== !!sec.tables?.length).toBe(true);
-        for (const t of sec.tables ?? []) {
-          const where = `${r.game_id} ${side.offense} ${t.id}`;
-          // Every table is labeled with exactly one season, matching its window.
-          expect(t.season, where).toBe(sec.id === 'prior' ? r.window.prior.season : r.season);
-          expect(t.peer.length, where).toBeGreaterThan(0);
-          expect(t.takeaways.length, where).toBeGreaterThanOrEqual(1);
-          expect(t.takeaways.length, where).toBeLessThanOrEqual(4);
-          const body = t.rows.filter((x) => x.kind !== 'ref' && x.kind !== 'total');
-          const shareKey = t.checks?.shares_sum_to_one;
-          if (shareKey) {
-            const vals = body.map((x) => x.cells[shareKey]).filter((v): v is number => typeof v === 'number');
-            if (vals.length) expect(Math.abs(vals.reduce((a, b) => a + b, 0) - 1), `${where} shares`).toBeLessThan(TOL);
-          }
-          const groupKey = t.checks?.shares_sum_to_one_by_group;
-          if (groupKey) {
-            for (const grp of new Set(body.map((x) => x.group))) {
-              const vals = body.filter((x) => x.group === grp).map((x) => x.cells[groupKey]).filter((v): v is number => typeof v === 'number');
-              if (vals.length) expect(Math.abs(vals.reduce((a, b) => a + b, 0) - 1), `${where} ${grp}`).toBeLessThan(TOL);
-            }
-          }
-          const sumKey = t.checks?.rows_sum_to_total;
-          const total = t.rows.find((x) => x.kind === 'total');
-          if (sumKey && total) expect(body.reduce((a, x) => a + ((x.cells[sumKey] as number) ?? 0), 0), `${where} rows vs total`).toBe(total.cells[sumKey]);
-          for (const x of t.rows) {
-            for (const [k, [rank, n]] of Object.entries(x.ranks)) {
-              expect(rank, `${where} ${x.label} ${k}`).toBeGreaterThanOrEqual(1);
-              expect(rank, `${where} ${x.label} ${k}`).toBeLessThanOrEqual(n);
-            }
+    // Two separate seasons: the current one (games before this week only) and the full prior season.
+    const [cur, prior] = r.seasons;
+    expect([cur.current, prior.current]).toEqual([true, false]);
+    expect(prior.season).toBe(cur.season - 1);
+    expect(cur.weeks.every((w) => w < r.week)).toBe(true);
+
+    // One row per offense: both sides of every game.
+    expect(r.rows.length).toBe(r.games.length * 2);
+    for (const g of r.games) {
+      expect(r.rows.filter((x) => x.game_id === g.game_id).map((x) => [x.offense, x.defense]).sort()).toEqual([[g.away, g.home], [g.home, g.away]].sort());
+    }
+
+    for (const row of r.rows) {
+      for (const meta of r.seasons) {
+        const b = row.seasons[String(meta.season)];
+        const where = `week ${r.week} ${row.offense} vs ${row.defense} (${meta.season})`;
+        if (meta.empty) {
+          expect(b, where).toBeNull();
+          continue;
+        }
+        expect(b, where).toBeTruthy();
+        if (!b) continue;
+        expect(b.season).toBe(meta.season);
+        for (const grp of new Set(b.splits.map((s) => s.group))) {
+          for (const unit of ['off', 'def'] as const) {
+            const vals = b.splits.filter((s) => s.group === grp).map((s) => s[unit].share).filter((v): v is number => typeof v === 'number');
+            if (vals.length) expect(Math.abs(vals.reduce((a, c) => a + c, 0) - 1), `${where} ${unit} ${grp} shares`).toBeLessThan(TOL);
           }
         }
+        for (const s of b.splits) {
+          if (s.edge != null) expect(s.edge >= 0 && s.edge <= 100, `${where} ${s.key} edge`).toBe(true);
+          for (const m of [s.off, s.def]) for (const [rank, n] of Object.values(m.ranks)) expect(rank >= 1 && rank <= n, `${where} ${s.key} rank`).toBe(true);
+        }
+        if (b.run_edge != null) expect(b.run_edge >= 0 && b.run_edge <= 100).toBe(true);
+        const total = b.rushers.find((x) => x.kind === 'total');
+        if (total) expect(b.rushers.filter((x) => x.kind !== 'total').reduce((a, x) => a + x.att, 0), `${where} rushers vs total`).toBe(total.att);
+        expect(b.takeaways.length).toBeLessThanOrEqual(2);
       }
     }
   });
 });
 
-describe('matchup formatting', () => {
+describe('formatting', () => {
   it('formats cells', () => {
     expect(formatCell(0.1234, 'epa')).toBe('+0.12');
     expect(formatCell(-0.05, 'epa')).toBe('−0.05');
