@@ -1,0 +1,82 @@
+@import 'tailwindcss';
+
+/*
+ * Design tokens, the same as the ClevAnalytics Lineup Optimizer so the two sites look alike.
+ * One accent (cyan), used sparingly.
+ */
+@theme {
+  --color-bg: #0a0d12;
+  --color-panel: #10141b;
+  --color-panel-2: #151a23;
+  --color-raise: #1b2230;
+  --color-line: #232a36;
+  --color-line-2: #2e3746;
+  --color-ink: #e6e9ef;
+  --color-ink-2: #a3acba;
+  --color-ink-3: #6f7886;
+  --color-accent: #22d3ee;
+  --color-accent-dim: #0e4f5c;
+
+
+  /* Status: reserved, always shown with an icon + words. */
+  --color-good: #4ade80;
+  --color-warn: #facc15;
+  --color-bad: #f87171;
+
+  --font-sans: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --font-mono: ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, Consolas, monospace;
+}
+
+/* In a layer so Tailwind utilities (text size, colour) win over these defaults. */
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    background: var(--color-bg);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    font-size: 13px;
+    font-variant-numeric: tabular-nums;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .num {
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: 'tnum' 1;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 1px;
+  }
+
+  select,
+  input,
+  button,
+  textarea {
+    font: inherit;
+    color: inherit;
+  }
+
+  select {
+    background-color: var(--color-panel-2);
+  }
+
+  dialog::backdrop {
+    background: rgb(0 0 0 / 0.6);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      transition: none !important;
+      animation: none !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}

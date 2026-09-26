@@ -1,0 +1,155 @@
+{
+ "schema": 1,
+ "season": 2026,
+ "weeks": [
+  {
+   "week": 3,
+   "games": [
+    {
+     "game_id": "2026_03_ATL_GB",
+     "away": "ATL",
+     "home": "GB",
+     "gameday": "2026-09-24",
+     "gametime": "20:15",
+     "path": "data/2026/week-03/2026_03_ATL_GB.json",
+     "data_as_of": "2026-09-21"
+    },
+    {
+     "game_id": "2026_03_CAR_CLE",
+     "away": "CAR",
+     "home": "CLE",
+     "gameday": "2026-09-27",
+     "gametime": "13:00",
+     "path": "data/2026/week-03/2026_03_CAR_CLE.json",
+     "data_as_of": "2026-09-21"
+    },
+    {
+     "game_id": "2026_03_CIN_PIT",
+     "away": "CIN",
+     "home": "PIT",
+     "gameday": "2026-09-27",
+     "gametime": "13:00",
+     "path": "data/2026/week-03/2026_03_CIN_PIT.json",
+     "data_as_of": "2026-09-21"
+    },
+    {
+     "game_id": "2026_03_HOU_IND",
+     "away": "HOU",
+     "home": "IND",
+     "gameday": "2026-09-27",
+     "gametime": "13:00",
+     "path": "data/2026/week-03/2026_03_HOU_IND.json",
+     "data_as_of": "2026-09-21"
+    },
+    {
+     "game_id": "2026_03_KC_MIA",
+     "away": "KC",
+     "home": "MIA",
+     "gameday": "2026-09-27",
+     "gametime": "13:00",
+     "path": "data/2026/week-03/2026_03_KC_MIA.json",
+     "data_as_of": "2026-09-21"
+    },
+    {
+     "game_id": "2026_03_LAC_BUF",
+     "away": "LAC",
+     "home": "BUF",
+     "gameday": "2026-09-27",
+     "gametime": "13:00",
+     "path": "data/2026/week-03/2026_03_LAC_BUF.json",
+     "data_as_of": "2026-09-21"
+    },
+    {
+     "game_id": "2026_03_NE_JAX",
+     "away": "NE",
+     "home": "JAX",
+     "gameday": "2026-09-27",
+     "gametime": "13:00",
+     "path": "data/2026/week-03/2026_03_NE_JAX.json",
+     "data_as_of": "2026-09-21"
+    },
+    {
+     "game_id": "2026_03_NYJ_DET",
+     "away": "NYJ",
+     "home": "DET",
+     "gameday": "2026-09-27",
+     "gametime": "13:00",
+     "path": "data/2026/week-03/2026_03_NYJ_DET.json",
+     "data_as_of": "2026-09-21"
+    },
+    {
+     "game_id": "2026_03_SEA_WAS",
+     "away": "SEA",
+     "home": "WAS",
+     "gameday": "2026-09-27",
+     "gametime": "13:00",
+     "path": "data/2026/week-03/2026_03_SEA_WAS.json",
+     "data_as_of": "2026-09-21"
+    },
+    {
+     "game_id": "2026_03_TEN_NYG",
+     "away": "TEN",
+     "home": "NYG",
+     "gameday": "2026-09-27",
+     "gametime": "13:00",
+     "path": "data/2026/week-03/2026_03_TEN_NYG.json",
+     "data_as_of": "2026-09-21"
+    },
+    {
+     "game_id": "2026_03_ARI_SF",
+     "away": "ARI",
+     "home": "SF",
+     "gameday": "2026-09-27",
+     "gametime": "16:05",
+     "path": "data/2026/week-03/2026_03_ARI_SF.json",
+     "data_as_of": "2026-09-21"
+    },
+    {
+     "game_id": "2026_03_MIN_TB",
+     "away": "MIN",
+     "home": "TB",
+     "gameday": "2026-09-27",
+     "gametime": "16:05",
+     "path": "data/2026/week-03/2026_03_MIN_TB.json",
+     "data_as_of": "2026-09-21"
+    },
+    {
+     "game_id": "2026_03_BAL_DAL",
+     "away": "BAL",
+     "home": "DAL",
+     "gameday": "2026-09-27",
+     "gametime": "16:25",
+     "path": "data/2026/week-03/2026_03_BAL_DAL.json",
+     "data_as_of": "2026-09-21"
+    },
+    {
+     "game_id": "2026_03_LV_NO",
+     "away": "LV",
+     "home": "NO",
+     "gameday": "2026-09-27",
+     "gametime": "16:25",
+     "path": "data/2026/week-03/2026_03_LV_NO.json",
+     "data_as_of": "2026-09-21"
+    },
+    {
+     "game_id": "2026_03_LA_DEN",
+     "away": "LA",
+     "home": "DEN",
+     "gameday": "2026-09-27",
+     "gametime": "20:20",
+     "path": "data/2026/week-03/2026_03_LA_DEN.json",
+     "data_as_of": "2026-09-21"
+    },
+    {
+     "game_id": "2026_03_PHI_CHI",
+     "away": "PHI",
+     "home": "CHI",
+     "gameday": "2026-09-28",
+     "gametime": "20:15",
+     "path": "data/2026/week-03/2026_03_PHI_CHI.json",
+     "data_as_of": "2026-09-21"
+    }
+   ]
+  }
+ ]
+}

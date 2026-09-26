@@ -1,0 +1,32 @@
+# Netlify: builds from GitHub on every push to main (including the weekly data commits).
+# `npm run build` runs the tests, including the check of every file in data/, so a bad data file
+# fails the deploy instead of breaking the live site.
+[build]
+  command = "npm run build"
+  publish = "dist"
+
+[build.environment]
+  NODE_VERSION = "22"
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    # Everything the page loads is same-origin (the report data is bundled into the build).
+    # frame-ancestors * lets your website builder embed the page in an iframe. To lock embedding to
+    # your own site, replace * with your domain, e.g. https://www.clevanalytics.com
+    Content-Security-Policy = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'; frame-ancestors *"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+    X-Content-Type-Options = "nosniff"
+    Permissions-Policy = "camera=(), microphone=(), geolocation=()"
+
+# Hashed build assets never change, so browsers can cache them for a year.
+[[headers]]
+  for = "/assets/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+
+# The page itself is always re-checked, so new weekly data shows up right away.
+[[headers]]
+  for = "/index.html"
+  [headers.values]
+    Cache-Control = "public, max-age=0, must-revalidate"
