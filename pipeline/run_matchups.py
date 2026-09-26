@@ -21,6 +21,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from matchups import load  # noqa: E402
 from matchups.config import OUTPUT_DIR, SCHEMA_VERSION, SEASON_TYPE  # noqa: E402
 from matchups.validate import ValidationError, check_pbp_complete, check_report, reconcile_pfr, reconcile_removed, reconcile_team_totals  # noqa: E402
+from matchups.logos import ensure_logos  # noqa: E402
 from matchups.weekly import week_report  # noqa: E402
 from matchups.window import build_window, completed_weeks_before  # noqa: E402
 
@@ -61,6 +62,7 @@ def main() -> int:
     g = ap.add_mutually_exclusive_group()
     g.add_argument("--week", type=int, help="one week (default: nflverse current week)")
     g.add_argument("--all", action="store_true", help="every regular-season week on the schedule")
+    ap.add_argument("--refresh-logos", action="store_true", help="re-download team logos even if already saved")
     ap.add_argument("--out", type=Path, default=OUTPUT_DIR, help="output folder (default: data/)")
     args = ap.parse_args()
 
@@ -72,6 +74,8 @@ def main() -> int:
     all_weeks = sorted(sched["week"].unique().to_list())
     target_weeks = all_weeks if args.all else [args.week or nfl.get_current_week()]
 
+    teams = set(sched["away_team"].to_list()) | set(sched["home_team"].to_list())
+    print(ensure_logos(teams, refresh=args.refresh_logos))
     players = load.players((prior_season, season))
     print(f"Season {season} (prior {prior_season}); weeks {target_weeks}")
 

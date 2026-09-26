@@ -1,6 +1,7 @@
 import { Fragment, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { defaultWeek, listSeasons, loadWeek } from './data';
 import { formatCell, formatDate, formatKickoff } from './format';
+import { TeamLogo, teamName } from './TeamLogo';
 import type { BandKey, MatchupRow, Metrics, Rank, SeasonBlock, Split, WeekReport } from './types';
 
 /** True when the page runs inside an iframe (e.g. embedded on a website-builder page). */
@@ -263,7 +264,10 @@ export default function MatchupApp() {
                           <tr className={`border-t border-line/70 ${isOpen ? 'bg-panel-2/60' : 'hover:bg-panel-2/40'}`}>
                             <th scope="row" className={`sticky left-0 z-10 px-3 py-2 text-left font-semibold ${isOpen ? 'bg-[#141a23]' : 'bg-panel'}`}>
                               <span className="flex items-center justify-between gap-3">
-                                <span className="text-[14px]">{r.offense}</span>
+                                <span className="flex items-center gap-2" title={teamName(r.offense)}>
+                                  <TeamLogo team={r.offense} size={24} />
+                                  <span className="text-[14px]">{r.offense}</span>
+                                </span>
                                 {/* Phones: the edge column is off-screen, so show the badge here too. */}
                                 <span className="sm:hidden">{s ? <EdgeBadge edge={s.edge} band={s.band} small={s.small} /> : null}</span>
                               </span>
@@ -273,7 +277,9 @@ export default function MatchupApp() {
                               </span>
                             </th>
                             <td className="hidden px-3 py-2 text-ink-2 sm:table-cell">
-                              {r.home ? 'vs' : '@'} <span className="font-semibold text-ink">{r.defense}</span>
+                              <span className="inline-flex items-center gap-1.5" title={teamName(r.defense)}>
+                                {r.home ? 'vs' : '@'} <TeamLogo team={r.defense} size={20} /> <span className="font-semibold text-ink">{r.defense}</span>
+                              </span>
                             </td>
                             <td className="px-3 py-2 text-right">{s ? <Stat v={s.off.epa} fmt="epa" rank={s.off.ranks.epa} n={s.off.att} /> : '—'}</td>
                             <td className="px-3 py-2 text-right">{s ? <Stat v={s.def.epa} fmt="epa" rank={s.def.ranks.epa} n={s.def.att} /> : '—'}</td>
@@ -366,8 +372,9 @@ function Detail({ row, b, report, onClose }: { row: MatchupRow; b: SeasonBlock; 
     <div className="px-3 py-3 sm:px-4">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
-          <h2 className="text-[16px] font-semibold">
-            {off} run game <span className="text-ink-3">{row.home ? 'vs' : '@'}</span> {dfn} run defense
+          <h2 className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[16px] font-semibold">
+            <TeamLogo team={off} size={28} /> {teamName(off)} run game <span className="text-ink-3">{row.home ? 'vs' : '@'}</span>
+            <TeamLogo team={dfn} size={28} /> {teamName(dfn)} run defense
           </h2>
           <p className="text-[11.5px] text-ink-3">
             {g && `${formatDate(g.gameday)} · ${formatKickoff(g.gametime)}${g.stadium ? ` · ${g.stadium}` : ''} · `}

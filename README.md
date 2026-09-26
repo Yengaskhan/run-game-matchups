@@ -63,6 +63,8 @@ git add data && git commit -m "Matchups: week 4" && git push
 
 A single-week run adds that week and keeps the weeks already on disk; the index is rebuilt from the files present. To drop old weeks, delete their `data/<season>/week-XX.json` files and re-run any week.
 
+**Team logos:** each run makes sure `src/assets/logos/<TEAM>.png` exists for every team on the schedule. These are nflverse's squared team logos, shrunk to 64 px and committed with the site, so the page loads nothing from other hosts. Full team names go in `src/assets/teams.json`. Saved logos are kept; add `--refresh-logos` to download them again, e.g. after a rebrand.
+
 **Which games count:** a Week N report uses only current-season weeks before N in which **every** game is final. A half-played week (e.g. only Thursday night done) is left out until it finishes, so every team's sample covers the same weeks. Reports for future weeks use every completed week. The prior season is always the full regular season, picked with the page's Season selector and never combined with the current one.
 
 **The run stops, and writes nothing, if a check fails:**
