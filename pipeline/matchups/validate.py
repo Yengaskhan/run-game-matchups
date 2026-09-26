@@ -5,7 +5,7 @@ Reconciliation and consistency checks. Any failure stops the run before files ar
 1. PBP rush totals per team-game match nflverse team_stats (carries and rushing yards) within TOLERANCE.
 2. Designed runs + every removed category add back up to all rush attempts.
 3. PFR carries per team-game match team_stats carries (so YBC/YAC cover every carry).
-4. In every written table, shares sum to 100% (±0.1 point: values are rounded to 4 decimals) and rusher rows sum to the team total.
+4. In every season block, split shares sum to 100% (±0.1 point: values are rounded to 4 decimals) and rusher rows sum to the team total.
 """
 
 import polars as pl
@@ -68,26 +68,20 @@ def reconcile_pfr(pfr: pl.DataFrame, team_stats: pl.DataFrame, weeks: list[int])
 
 
 def check_report(report: dict) -> None:
-    """Shares sum to 1 and rusher rows sum to the total, in every table that declares the check."""
-    for s in report["sides"]:
-        for sec in s["sections"]:
-            for t in sec.get("tables", []):
-                where = f"{report['game_id']} {s['offense']} / {t['id']}"
-                checks = t.get("checks", {})
-                rows = [r for r in t["rows"] if r["kind"] not in ("ref", "total")]
-                if "shares_sum_to_one" in checks:
-                    k = checks["shares_sum_to_one"]
-                    vals = [r["cells"][k] for r in rows if r["cells"].get(k) is not None]
+    """In every season block: each split group's shares sum to 1 (offense and defense), and the
+    current-season rusher rows sum to the team total."""
+    for row in report["rows"]:
+        for season, blk in row["seasons"].items():
+            if not blk:
+                continue
+            where = f"week {report['week']} {row['offense']} vs {row['defense']} ({season})"
+            for group in {s["group"] for s in blk["splits"]}:
+                for unit in ("off", "def"):
+                    vals = [s[unit]["share"] for s in blk["splits"] if s["group"] == group and s[unit]["share"] is not None]
                     if vals and abs(sum(vals) - 1) > 1e-3:
-                        raise ValidationError(f"{where}: shares sum to {sum(vals):.6f}")
-                if "shares_sum_to_one_by_group" in checks:
-                    k = checks["shares_sum_to_one_by_group"]
-                    for g in {r.get("group") for r in rows}:
-                        vals = [r["cells"][k] for r in rows if r.get("group") == g and r["cells"].get(k) is not None]
-                        if vals and abs(sum(vals) - 1) > 1e-3:
-                            raise ValidationError(f"{where} [{g}]: shares sum to {sum(vals):.6f}")
-                if "rows_sum_to_total" in checks:
-                    k = checks["rows_sum_to_total"]
-                    total = next((r for r in t["rows"] if r["kind"] == "total"), None)
-                    if total and sum(r["cells"][k] or 0 for r in rows) != total["cells"][k]:
-                        raise ValidationError(f"{where}: rusher rows sum to {sum(r['cells'][k] or 0 for r in rows)}, team total {total['cells'][k]}")
+                        raise ValidationError(f"{where}: {unit} {group} shares sum to {sum(vals):.6f}")
+            total = next((r for r in blk["rushers"] if r["kind"] == "total"), None)
+            if total:
+                got = sum(r["att"] for r in blk["rushers"] if r["kind"] != "total")
+                if got != total["att"]:
+                    raise ValidationError(f"{where}: rusher rows sum to {got}, team total {total['att']}")

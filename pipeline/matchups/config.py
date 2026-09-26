@@ -12,7 +12,7 @@ APP_ROOT = Path(__file__).resolve().parents[2]
 OUTPUT_DIR = APP_ROOT / "data"
 
 # Bump when the JSON layout changes in a way the page must know about.
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 # Only regular-season games feed either season's numbers. Playoff games are excluded.
 SEASON_TYPE = "REG"
@@ -30,11 +30,24 @@ QUALIFIERS = {
     "bucket_min_att_prior": 25,
 }
 
-# Overlap section: which offense buckets count as "most used", and how big a gap between the
-# offense's and the defense's percentile (0-1) must be before it is called a mismatch.
-OVERLAP = {
+# Run Edge (0-100, 50 = neutral). In one bucket (a direction, gap or box count):
+#   edge = 50 + 50 x (offense EPA/run percentile - defense EPA-allowed percentile)
+# where each percentile is within its own ranked table (1 = best offense / stingiest defense).
+# The headline Run Edge averages the left / middle / right edges, weighted by how often the offense
+# runs each way. It is only shaded when the ranked directions cover at least `min_coverage` of the
+# offense's runs; below that it shows grey as "small sample".
+EDGE = {
+    "min_coverage": 0.5,
+    # Colour bands, lower bound inclusive.
+    "bands": [
+        ("big_edge", "Big edge", 70),
+        ("small_edge", "Small edge", 58),
+        ("neutral", "Neutral", 43),
+        ("small_disadvantage", "Small disadvantage", 31),
+        ("big_disadvantage", "Big disadvantage", 0),
+    ],
+    # Detail takeaways: a gap counts as "used" at this share of the offense's designed runs.
     "min_share": 0.10,
-    "min_edge": 0.25,
 }
 
 # A run of this many yards or more is explosive. A run of 0 or fewer yards is a stuff.

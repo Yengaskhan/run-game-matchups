@@ -18,6 +18,10 @@
   --color-accent-dim: #0e4f5c;
 
 
+  /* Run Edge bands (green = offense edge, orange = defense edge); always shown with the number. */
+  --color-edge-good: #34d399;
+  --color-edge-bad: #fb923c;
+
   /* Status: reserved, always shown with an icon + words. */
   --color-good: #4ade80;
   --color-warn: #facc15;
