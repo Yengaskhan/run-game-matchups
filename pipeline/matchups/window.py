@@ -29,6 +29,7 @@ class LeagueWindow:
     uncharted: dict[str, dict[str, int]] = field(default_factory=dict)
     league: dict[str, dict] = field(default_factory=dict)
     pfr: pl.DataFrame | None = None
+    pfr_weeks: list[int] = field(default_factory=list)
 
     def row(self, table: str, **match) -> dict | None:
         df = self.tables[table]
@@ -51,7 +52,8 @@ def completed_weeks_before(schedule: pl.DataFrame, week: int) -> list[int]:
     return sorted(done["week"].to_list())
 
 
-def build_window(season: int, weeks: list[int], is_current: bool, players: pl.DataFrame) -> LeagueWindow:
+def build_window(season: int, weeks: list[int], is_current: bool, players: pl.DataFrame, pfr_weeks: list[int] | None = None) -> LeagueWindow:
+    """pfr_weeks: the weeks PFR (YBC / YAC) covers, when it lags behind play-by-play. Default: all weeks."""
     sched = load.schedule(season)
     pbp = load.pbp(season)
     pbp = pbp.filter(pl.col("week").is_in(weeks))
@@ -74,10 +76,11 @@ def build_window(season: int, weeks: list[int], is_current: bool, players: pl.Da
     rper = QUALIFIERS["rusher_att_per_team_game"]
     rusher_rule = f"non-QB rushers with at least {rper:g} designed runs per team game"
 
-    pfr = pfr_window(load.pfr_rush_weekly(season), weeks, players) if weeks else None
+    pfr_weeks = weeks if pfr_weeks is None else pfr_weeks
+    pfr = pfr_window(load.pfr_rush_weekly(season), pfr_weeks, players) if pfr_weeks else None
     snaps = snap_shares(load.snap_counts(season), weeks, players) if (weeks and is_current) else None
 
-    w = LeagueWindow(season, weeks, is_current, runs, removed, games, bucket_rule, rusher_rule, data_as_of, pfr=pfr)
+    w = LeagueWindow(season, weeks, is_current, runs, removed, games, bucket_rule, rusher_rule, data_as_of, pfr=pfr, pfr_weeks=pfr_weeks)
     if not weeks:
         return w
     box_ok = runs["box"].is_not_null().any()

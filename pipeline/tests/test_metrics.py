@@ -124,3 +124,13 @@ def test_edge_formula_and_bands():
     assert [band(x) for x in (70, 69, 58, 57, 43, 42, 31, 30)] == [
         "big_edge", "small_edge", "small_edge", "neutral", "neutral", "small_disadvantage", "small_disadvantage", "big_disadvantage"]
     assert band(90, small_sample=True) == "neutral" and band(None) == "neutral"
+
+
+def test_pfr_complete_weeks_stops_at_first_incomplete_week():
+    from matchups.validate import pfr_complete_weeks
+
+    ts = pl.DataFrame({"season_type": ["REG"] * 6, "week": [1, 1, 2, 2, 3, 3],
+                       "game_id": ["g1", "g1", "g2", "g2", "g3", "g3"], "team": ["A", "B"] * 3})
+    pfr = pl.DataFrame({"game_id": ["g1", "g1", "g2", "g2", "g3"], "team": ["A", "B", "A", "B", "A"]})
+    assert pfr_complete_weeks(pfr, ts, [1, 2, 3]) == ([1, 2], ["g3"])  # g3 is missing team B
+    assert pfr_complete_weeks(pfr.filter(pl.col("game_id") != "g1"), ts, [1, 2, 3])[0] == []

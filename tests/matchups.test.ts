@@ -1,6 +1,7 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { defaultWeek } from '../src/data';
 import { formatCell, formatKickoff } from '../src/format';
 import type { SeasonIndex, WeekReport } from '../src/types';
 
@@ -67,6 +68,17 @@ describe.each(seasons)('matchup reports %s', (season) => {
         expect(b.takeaways.length).toBeLessThanOrEqual(2);
       }
     }
+  });
+});
+
+describe('default week', () => {
+  const w = (week: number, first: string, last: string) => ({ week, games: 16, first_gameday: first, last_gameday: last, path: '', data_as_of: null });
+  const index = { schema: 2, season: 2026, weeks: [w(3, '2026-09-24', '2026-09-28'), w(4, '2026-10-01', '2026-10-05')] };
+  it('opens the week still being played, and moves on once it ends', () => {
+    expect(defaultWeek(index, new Date('2026-09-27T15:00:00Z'))).toBe(3); // Sunday of week 3
+    expect(defaultWeek(index, new Date('2026-09-28T15:00:00Z'))).toBe(3); // Monday night still to play
+    expect(defaultWeek(index, new Date('2026-09-30T15:00:00Z'))).toBe(4); // Wednesday: week 3 is over
+    expect(defaultWeek(index, new Date('2026-10-20T15:00:00Z'))).toBe(4); // past the last week on file
   });
 });
 

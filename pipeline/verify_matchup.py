@@ -27,6 +27,8 @@ def main(game_id: str) -> int:
         return 1
     season, prior = rep["season"], rep["season"] - 1
     weeks = next(x["weeks"] for x in rep["seasons"] if x["current"])
+    # YBC / YAC cover only the weeks PFR has published (they can trail play-by-play by a day or two).
+    pfr_weeks = next(x.get("pfr_weeks", x["weeks"]) for x in rep["seasons"] if x["current"])
 
     pbp = nfl.load_pbp([season]).to_pandas()
     pbp = pbp[(pbp.season_type == "REG") & pbp.week.isin(weeks)]
@@ -49,7 +51,7 @@ def main(game_id: str) -> int:
     ts = nfl.load_team_stats([season], summary_level="week").to_pandas()
     ts = ts[(ts.season_type == "REG") & ts.week.isin(weeks)]
     pfr = nfl.load_pfr_advstats([season], stat_type="rush", summary_level="week").to_pandas()
-    pfr = pfr[(pfr.game_type == "REG") & pfr.week.isin(weeks)]
+    pfr = pfr[(pfr.game_type == "REG") & pfr.week.isin(pfr_weeks)]
     pfr_pos = ro.dropna(subset=["pfr_id"]).drop_duplicates("pfr_id", keep="last").set_index("pfr_id")
     pfr["gsis_id"] = pfr.pfr_player_id.map(pfr_pos["gsis_id"])
     pfr["is_qb"] = pfr.pfr_player_id.map(pfr_pos["position"]).eq("QB")

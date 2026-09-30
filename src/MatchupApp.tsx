@@ -359,6 +359,9 @@ function Select({ label, value, onChange, options }: { label: string; value: str
 function Detail({ row, b, report, onClose }: { row: MatchupRow; b: SeasonBlock; report: WeekReport; onClose: () => void }) {
   const g = report.games.find((x) => x.game_id === row.game_id);
   const meta = report.seasons.find((s) => s.season === b.season)!;
+  // PFR (YBC / YAC) can trail play-by-play by a day or two; say which weeks it covers when it does.
+  const pw = meta.pfr_weeks ?? meta.weeks;
+  const pfrNote = pw.length === meta.weeks.length ? null : pw.length ? `YBC/YAC: ${pw.length === 1 ? `week ${pw[0]}` : `weeks ${pw[0]}–${pw[pw.length - 1]}`} (PFR not yet updated)` : 'YBC/YAC not yet available';
   const off = row.offense;
   const dfn = row.defense;
   const o = b.overall.off;
@@ -388,8 +391,8 @@ function Detail({ row, b, report, onClose }: { row: MatchupRow; b: SeasonBlock; 
       </div>
 
       <div className="mt-3 grid gap-2 md:grid-cols-2">
-        <StatStrip title={`${off} offense`} m={o} kind="offense" />
-        <StatStrip title={`${dfn} defense allowed`} m={d} kind="defense" />
+        <StatStrip title={`${off} offense`} m={o} kind="offense" pfrNote={pfrNote} />
+        <StatStrip title={`${dfn} defense allowed`} m={d} kind="defense" pfrNote={pfrNote} />
       </div>
 
       <div className="mt-3 overflow-x-auto rounded border border-line">
@@ -464,7 +467,7 @@ function SplitCells({ m, first }: { m: Metrics; first?: boolean }) {
   );
 }
 
-function StatStrip({ title, m, kind }: { title: string; m: SeasonBlock['overall']['off']; kind: 'offense' | 'defense' }) {
+function StatStrip({ title, m, kind, pfrNote }: { title: string; m: SeasonBlock['overall']['off']; kind: 'offense' | 'defense'; pfrNote: string | null }) {
   const items: [string, number | null, Parameters<typeof formatCell>[1], Rank | undefined][] = [
     ['EPA/run', m.epa, 'epa', m.ranks.epa],
     ['Success', m.sr, 'pct', m.ranks.sr],
@@ -478,6 +481,7 @@ function StatStrip({ title, m, kind }: { title: string; m: SeasonBlock['overall'
     <div className="rounded border border-line bg-panel px-3 py-2">
       <p className="text-[11px] text-ink-3">
         <span className="font-semibold text-ink">{title}</span> · {m.att} designed runs, {m.games} games
+        {pfrNote && <span className="text-warn"> · {pfrNote}</span>}
         {m.qb_att ? ` · ${m.qb_att} QB runs` : ''}
       </p>
       <dl className="num mt-1 grid grid-cols-4 gap-x-3 gap-y-1.5 sm:grid-cols-7">

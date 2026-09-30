@@ -82,7 +82,8 @@ export interface WeekReport {
   week: number;
   generated_at: string;
   data_as_of: string | null;
-  seasons: { season: number; label: string; weeks: number[]; current: boolean; empty: string | null }[];
+  /** pfr_weeks: weeks behind YBC / YAC; fewer than `weeks` when PFR hasn't caught up yet. */
+  seasons: { season: number; label: string; weeks: number[]; pfr_weeks: number[]; current: boolean; empty: string | null }[];
   games: { game_id: string; away: string; home: string; gameday: string; gametime: string | null; stadium: string | null }[];
   rows: MatchupRow[];
   edge: { bands: { key: BandKey; label: string; min: number }[]; min_coverage: number; definition: string };
@@ -96,5 +97,5 @@ export interface WeekReport {
 export interface SeasonIndex {
   schema: number;
   season: number;
-  weeks: { week: number; games: number; first_gameday: string; path: string; data_as_of: string | null }[];
+  weeks: { week: number; games: number; first_gameday: string; last_gameday: string; path: string; data_as_of: string | null }[];
 }

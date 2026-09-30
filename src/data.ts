@@ -20,10 +20,9 @@ export async function loadWeek(path: string): Promise<WeekReport> {
   return load();
 }
 
-/** The week to open by default: the week in progress (first game within the last 6 days), else the next one, else the last. */
+/** The week to open by default: the first week with a game today or later, else the last week. */
 export function defaultWeek(index: SeasonIndex, today = new Date()): number | null {
   const iso = today.toISOString().slice(0, 10);
-  const cutoff = new Date(today.getTime() - 6 * 864e5).toISOString().slice(0, 10);
-  const current = index.weeks.find((w) => w.first_gameday >= cutoff && w.first_gameday <= iso) ?? index.weeks.find((w) => w.first_gameday >= iso);
-  return (current ?? index.weeks[index.weeks.length - 1])?.week ?? null;
+  const next = index.weeks.find((w) => (w.last_gameday ?? w.first_gameday) >= iso);
+  return (next ?? index.weeks[index.weeks.length - 1])?.week ?? null;
 }
