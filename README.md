@@ -41,7 +41,24 @@ When embedded, the page shows an "Open full screen ↗" link. The selected game 
 
 ## Refreshing the data (weekly)
 
-Netlify only runs Node, so you refresh the data on your own computer and push it.
+### Automatic (GitHub Actions)
+
+`.github/workflows/weekly-refresh.yml` does the weekly refresh on GitHub's servers, September through January:
+
+| When (UTC) | What |
+|---|---|
+| Tuesday 10:00 | After Monday Night Football: builds the new week's report from every completed week |
+| Wednesday and Thursday 10:00 | Re-runs, filling in PFR yards before / after contact once PFR has published the last games |
+
+Each run installs the pipeline, runs it, then runs `npm run build`, the same check Netlify runs. If anything changed, it commits the data to `main` and Netlify redeploys. A run with no new data commits nothing.
+
+- **Run it by hand:** GitHub → **Actions** → **Weekly data refresh** → **Run workflow**. Leave the week blank for the current week, or type a week number.
+- **If a run fails** (a validation check stops the pipeline, or nflverse is down), GitHub emails you and nothing is committed; the live site keeps the last good data. The next scheduled run tries again.
+- **Changing the times:** edit the `cron` line in the workflow. GitHub may start scheduled runs a few minutes late.
+
+### By hand
+
+The same thing on your own computer:
 
 One-time setup:
 
@@ -71,11 +88,13 @@ A single-week run adds that week and keeps the weeks already on disk; the index 
 - a final game is missing from play-by-play
 - PBP rush totals don't match nflverse `team_stats` within tolerance (2 carries / 3 yards per team-game)
 - designed runs plus removed plays don't add back up to all rush attempts
-- PFR carries are missing or don't match
+- PFR carries don't match team totals
 - a table's direction/gap/box shares don't sum to 100%
 - rusher rows don't sum to the team total
 
-When PBP or PFR is simply a day behind, the message says so. Re-run later.
+When play-by-play is a day behind, the message says so; re-run later.
+
+**PFR lag:** Pro Football Reference (yards before / after contact) often trails play-by-play by a day or two, especially after Monday night. The run doesn't stop. YBC / YAC use the weeks PFR has for every game, for every team so the samples match, and everything else uses every completed week. The page flags it in amber ("YBC/YAC: weeks 1–2 (PFR not yet updated)"), and the next run fills it in.
 
 ## Changing the qualifiers
 
@@ -121,7 +140,7 @@ A 0–100 score, 50 = even, shaded green (offense edge) to orange (defense edge)
 ## Report layout
 
 - **Header:** week, **Season** selector (current season to date, or the full prior season; never combined), **Split** selector, **Find team** box, and the colour legend.
-- **Main table:** one row per offense playing that week, with opponent, offense EPA/run and defense EPA allowed (each with rank/peer group and attempts), main run direction, and Run Edge. Every column sorts.
+- **Main table:** one row per offense playing that week, led by its starting RB (RB1 on the nflverse depth chart, with his carries and share of the team's designed runs), then opponent, offense EPA/run and defense EPA allowed (each with rank/peer group and attempts), main run direction, and Run Edge. Every column sorts.
 - **View** opens the detail under the row:
   - one-line stat strips for the offense and the defense (EPA, success, YPC, explosive, stuffed, YBC, YAC, with ranks)
   - one table of direction / gap / box splits: offense | defense | edge

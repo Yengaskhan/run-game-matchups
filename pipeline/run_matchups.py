@@ -19,8 +19,9 @@ import polars as pl
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from matchups import load  # noqa: E402
+from matchups.fmt import weeks_label  # noqa: E402
 from matchups.config import OUTPUT_DIR, SCHEMA_VERSION, SEASON_TYPE  # noqa: E402
-from matchups.validate import ValidationError, check_pbp_complete, check_report, reconcile_pfr, reconcile_removed, reconcile_team_totals  # noqa: E402
+from matchups.validate import ValidationError, check_pbp_complete, check_report, pfr_complete_weeks, reconcile_pfr, reconcile_removed, reconcile_team_totals  # noqa: E402
 from matchups.logos import ensure_logos  # noqa: E402
 from matchups.weekly import week_report  # noqa: E402
 from matchups.window import build_window, completed_weeks_before  # noqa: E402
@@ -46,7 +47,7 @@ def write_index(out: Path, season: int) -> Path:
     for f in sorted(root.glob("week-*.json")):
         r = json.loads(f.read_text())
         weeks.append({
-            "week": r["week"], "games": len(r["games"]), "first_gameday": min(g["gameday"] for g in r["games"]),
+            "week": r["week"], "games": len(r["games"]), "first_gameday": min(g["gameday"] for g in r["games"]), "last_gameday": max(g["gameday"] for g in r["games"]),
             # Path as the site sees it (the site always bundles data/).
             "path": f"data/{f.relative_to(out).as_posix()}", "data_as_of": r["data_as_of"],
         })
@@ -93,14 +94,21 @@ def main() -> int:
     for week in target_weeks:
         weeks = completed_weeks_before(sched, week)
         if tuple(weeks) not in windows:
-            cur = build_window(season, weeks, True, players)
+            pfr_all = load.pfr_rush_weekly(season).filter(pl.col("game_type") == SEASON_TYPE)
+            pfr_weeks, pfr_missing = pfr_complete_weeks(pfr_all, load.team_stats(season), weeks) if weeks else ([], [])
+            cur = build_window(season, weeks, True, players, pfr_weeks)
             checks = list(prior_checks)
             if weeks:
-                checks = [
+                lag = []
+                if pfr_weeks != weeks:
+                    lag = [f"{season}: PFR hasn't published {', '.join(pfr_missing)} yet, so YBC / YAC use {weeks_label(pfr_weeks)} for every team; everything else uses {weeks_label(weeks)}. Re-run later to fill in." if pfr_weeks else
+                           f"{season}: PFR hasn't published {', '.join(pfr_missing)} yet, so YBC / YAC are left out; re-run later to fill in."]
+                    print("  NOTE:", lag[0])
+                checks = lag + [
                     f"{season}: " + check_pbp_complete(load.pbp(season), load.schedule(season), weeks),
                     f"{season}: " + reconcile_team_totals(load.pbp(season), load.team_stats(season), weeks),
                     f"{season}: " + reconcile_removed(load.pbp(season), cur.runs, cur.removed, weeks),
-                    f"{season}: " + reconcile_pfr(load.pfr_rush_weekly(season).filter(pl.col("game_type") == SEASON_TYPE), load.team_stats(season), weeks),
+                    *([f"{season}: " + reconcile_pfr(pfr_all, load.team_stats(season), pfr_weeks)] if pfr_weeks else []),
                 ] + checks
             windows[tuple(weeks)] = (cur, checks)
         cur, checks = windows[tuple(weeks)]
@@ -112,7 +120,15 @@ def main() -> int:
         rep = week_report(season, week, game_rows, cur, prior, depth,
                           checks + ["Report: direction / gap / box shares sum to 100% for every offense and defense; rusher rows sum to the team total."])
         check_report(rep)
-        (out_dir / f"week-{week:02d}.json").write_text(json.dumps(rep, indent=None, separators=(",", ":"), allow_nan=False) + "\n")
+        path = out_dir / f"week-{week:02d}.json"
+        # Keep the existing file when nothing but the timestamp would change, so a scheduled run with
+        # no new data makes no commit (and no redeploy).
+        if path.exists():
+            old = json.loads(path.read_text())
+            if {**old, "generated_at": None} == {**json.loads(json.dumps(rep)), "generated_at": None}:
+                print(f"  week {week}: unchanged")
+                continue
+        path.write_text(json.dumps(rep, indent=None, separators=(",", ":"), allow_nan=False) + "\n")
         written += 1
         print(f"  week {week}: {games.height} games, {len(rep['rows'])} run games, current-season window {weeks or 'none'}")
 

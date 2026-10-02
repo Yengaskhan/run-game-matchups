@@ -51,6 +51,22 @@ def reconcile_removed(pbp: pl.DataFrame, runs: pl.DataFrame, removed: dict, week
     return f"Filter accounting: {total} rush attempts = {runs.height} designed runs + " + ", ".join(f"{v} {k.replace('_', '-')}" for k, v in removed.items() if v) + "."
 
 
+def pfr_complete_weeks(pfr: pl.DataFrame, team_stats: pl.DataFrame, weeks: list[int]) -> tuple[list[int], list[str]]:
+    """The leading run of weeks in which PFR has every team-game, plus the games it is still missing.
+    PFR lags play-by-play by a day or two (Monday night games especially), so the weekly run uses
+    YBC / YAC through the last complete week instead of stopping, and says so on the page."""
+    ts = team_stats.filter(pl.col("season_type") == "REG", pl.col("week").is_in(weeks))
+    have = set(zip(pfr["game_id"].to_list(), pfr["team"].to_list()))
+    missing = ts.filter(~pl.struct(["game_id", "team"]).map_elements(lambda r: (r["game_id"], r["team"]) in have, return_dtype=pl.Boolean))
+    bad_weeks = set(missing["week"].to_list())
+    complete = []
+    for w in sorted(weeks):
+        if w in bad_weeks:
+            break
+        complete.append(w)
+    return complete, sorted(missing["game_id"].unique().to_list())
+
+
 def reconcile_pfr(pfr: pl.DataFrame, team_stats: pl.DataFrame, weeks: list[int]) -> str:
     ts = team_stats.filter(pl.col("season_type") == "REG", pl.col("week").is_in(weeks))
     p = pfr.group_by(["game_id", "team"]).agg(pl.col("carries").sum().alias("pfr"))

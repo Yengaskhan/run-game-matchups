@@ -103,7 +103,7 @@ def rushers_block(w: LeagueWindow, team: str, depth: list[dict]) -> list[dict]:
         m = metrics(recs.get(d["gsis_id"]), keys)
         out.append({"id": d["gsis_id"], "name": d["name"], "role": f"RB{d['pos_rank']}", "kind": "rb", **m})
     listed = {d["gsis_id"] for d in depth}
-    for r in sorted((r for r in recs.values() if r["rusher_player_id"] not in listed and not r["is_qb"] and r["att"]), key=lambda r: -r["att"]):
+    for r in sorted((r for r in recs.values() if r["rusher_player_id"] not in listed and not r["is_qb"] and r["att"]), key=lambda r: (-r["att"], r["name"] or "", r["rusher_player_id"])):  # stable order for ties
         out.append({"id": r["rusher_player_id"], "name": r["name"], "role": r.get("pos") or "—", "kind": "other", **metrics(r, keys)})
     team_rec = w.row("off", team=team)
     team_att = (team_rec or {}).get("att") or 0
@@ -169,6 +169,8 @@ def week_report(season: int, week: int, games: list[dict], cur: LeagueWindow, pr
                 or [{"id": d["gsis_id"], "name": d["name"]} for d in dep]
             rows.append({
                 "game_id": g["game_id"], "offense": off, "defense": dfn, "home": home,
+                # Starting RB: RB1 on the nflverse depth chart (latest snapshot; before kickoff day for played games).
+                "starter": {"id": dep[0]["gsis_id"], "name": dep[0]["name"]} if dep else None,
                 "seasons": {str(cur.season): cur_block, str(prior.season): side_block(prior, off, dfn, dep, players)},
             })
     bands = [{"key": k, "label": label, "min": lo} for k, label, lo in EDGE["bands"]]
@@ -180,8 +182,9 @@ def week_report(season: int, week: int, games: list[dict], cur: LeagueWindow, pr
         "data_as_of": cur.data_as_of,
         "seasons": [
             {"season": cur.season, "label": f"{cur.season} ({fmt.weeks_label(cur.weeks)})" if cur.weeks else f"{cur.season} (no games yet)", "weeks": cur.weeks, "current": True,
+             "pfr_weeks": cur.pfr_weeks,
              "empty": None if cur.weeks else f"No {cur.season} regular-season games were played before Week {week}. Switch to {prior.season}."},
-            {"season": prior.season, "label": f"{prior.season} (full season)", "weeks": prior.weeks, "current": False, "empty": None},
+            {"season": prior.season, "label": f"{prior.season} (full season)", "weeks": prior.weeks, "current": False, "pfr_weeks": prior.pfr_weeks, "empty": None},
         ],
         "games": [{"game_id": g["game_id"], "away": g["away_team"], "home": g["home_team"], "gameday": g["gameday"],
                    "gametime": g["gametime"], "stadium": g.get("stadium")} for g in games],
@@ -199,7 +202,9 @@ def week_report(season: int, week: int, games: list[dict], cur: LeagueWindow, pr
             f"Current-season numbers use only games before Week {week} ({fmt.weeks_label(cur.weeks)}). Small samples are noisy: read every rate next to its attempts (n).",
             "The two seasons are never combined. The prior season is last year's full regular season.",
             "Box counts: FTN charting via nflverse (n_defense_box). nflverse participation data is not published for the current season. Box counts of 0 are treated as not charted.",
-            "YBC / YAC: Pro Football Reference via nflverse, per player per game, so they include every carry; team figures use non-QB rushers only.",
+            "YBC / YAC: Pro Football Reference via nflverse, per player per game, so they include every carry; team figures use non-QB rushers only."
+            + (f" PFR hasn't published every {cur.season} game yet, so YBC / YAC cover {fmt.weeks_label(cur.pfr_weeks)} (everything else: {fmt.weeks_label(cur.weeks)})."
+               if cur.weeks and cur.pfr_weeks != cur.weeks else ""),
             f"Explosive = {EXPLOSIVE_YARDS}+ yards. Stuff = 0 or fewer. Success = EPA > 0. Rank 1 = best for that unit (best offense / stingiest defense).",
         ],
         "filters": FILTERS,

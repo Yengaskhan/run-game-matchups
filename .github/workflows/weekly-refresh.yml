@@ -1,0 +1,71 @@
+# Weekly data refresh: runs the nflverse pipeline, checks the site still builds, and commits new data to
+# main. Netlify then redeploys the site. Nothing to do by hand during the season.
+#
+# Schedule (UTC, September through January):
+#   Tue 10:00  after Monday Night Football: builds the new week's report (play-by-play is usually in)
+#   Wed 10:00  and Thu 10:00: fill in PFR yards before / after contact once PFR catches up
+# A run with no new data changes no files, so it makes no commit and no redeploy.
+# Run it by hand any time: GitHub → Actions → "Weekly data refresh" → Run workflow.
+
+name: Weekly data refresh
+
+on:
+  schedule:
+    - cron: "0 10 * 9-12,1 2,3,4"
+  workflow_dispatch:
+    inputs:
+      week:
+        description: "Week to build (blank = nflverse's current week)"
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+
+concurrency:
+  group: weekly-refresh
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: pipeline/requirements.txt
+
+      - name: Install pipeline dependencies
+        run: pip install -r pipeline/requirements.txt
+
+      - name: Run pipeline
+        # Stops (and the job fails, which GitHub emails you about) if any validation check fails.
+        run: python pipeline/run_matchups.py ${{ inputs.week && format('--week {0}', inputs.week) || '' }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Check the site builds with the new data
+        # Same command Netlify runs: typecheck, tests (including every data file), build.
+        run: |
+          npm ci
+          npm run build
+
+      - name: Commit new data
+        run: |
+          git add data src/assets
+          if git diff --cached --quiet; then
+            echo "No new data."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          label=$(python -c "import glob, json; i = json.load(open(sorted(glob.glob('data/*/index.json'))[-1])); print(f\"{i['season']} week {i['weeks'][-1]['week']}\")" 2>/dev/null || echo "latest week")
+          git commit -m "Data refresh: ${label} (automatic)"
+          git push
