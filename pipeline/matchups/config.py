@@ -28,6 +28,11 @@ QUALIFIERS = {
     "bucket_att_per_team_game": 3.0,
     # Direction / gap / box buckets, prior season: a flat minimum over the full season.
     "bucket_min_att_prior": 25,
+    # A rusher's own direction / gap / box splits (the starting RB in each row), current season: ranked
+    # among non-QB rushers with >= this x his team's games carries in that bucket (e.g. 6 after 3 games).
+    "rusher_bucket_att_per_team_game": 2.0,
+    # Same, prior season: a flat minimum over the full season.
+    "rusher_bucket_min_att_prior": 20,
 }
 
 # Run Edge (0-100, 50 = neutral). In one bucket (a direction, gap or box count):

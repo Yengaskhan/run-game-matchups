@@ -15,6 +15,9 @@ export interface Metrics {
 
 export interface Overall extends Metrics {
   games: number | null;
+  /** RB side only: his share of the team's designed runs and of its offensive snaps (current season). */
+  carry_share?: number | null;
+  snap_share?: number | null;
   ybc_att: number | null;
   yac_att: number | null;
   pfr_att: number | null;
@@ -57,6 +60,8 @@ export type BandKey = 'big_edge' | 'small_edge' | 'neutral' | 'small_disadvantag
 export interface SeasonBlock {
   season: number;
   weeks: number[];
+  /** Whose numbers the offense side is: the starting RB (his own carries only). */
+  subject: { kind: 'rb'; id: string | null; name: string; team: string; teams: string | null };
   overall: { off: Overall; def: Overall };
   run_edge: number | null;
   edge_coverage: number;

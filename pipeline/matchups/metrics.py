@@ -194,3 +194,27 @@ def nan_to_none(v):
     if isinstance(v, float) and (math.isnan(v) or math.isinf(v)):
         return None
     return v
+
+
+def rusher_split(runs: pl.DataFrame, key: str, buckets: list[str], games: pl.DataFrame, by_team: bool,
+                 per_game: float | None, flat_min: int | None) -> pl.DataFrame:
+    """One row per non-QB rusher x bucket (direction, gap or box), zero-filled, with the bucket's share of
+    HIS charted runs and ranks within the bucket among rushers with enough carries there.
+
+    by_team: current season keys rushers by (player, team); the prior season by player across teams.
+    The minimum is per_game x his team's games (current) or flat_min (prior)."""
+    keys = ["rusher_player_id", "posteam"] if by_team else ["rusher_player_id"]
+    known = runs.filter(pl.col(key).is_not_null() & ~pl.col("is_qb_run"))
+    if not known.height:
+        return pl.DataFrame()
+    grid = known.select(keys).unique().join(pl.DataFrame({"bucket": buckets}), how="cross")
+    g = known.group_by(keys + [key]).agg(agg_exprs()).rename({key: "bucket"})
+    df = grid.join(g, on=keys + ["bucket"], how="left").with_columns(pl.col("att").fill_null(0), pl.col("yds").fill_null(0.0))
+    tot = df.group_by(keys).agg(pl.col("att").sum().alias("player_att"))
+    df = df.join(tot, on=keys).with_columns(
+        pl.when(pl.col("player_att") > 0).then(pl.col("att") / pl.col("player_att")).otherwise(None).alias("share"))
+    if by_team:
+        df = df.join(games.rename({"team": "posteam"}), on="posteam", how="left").with_columns(ceil_min(per_game, pl.col("games")).alias("min_att"))
+    else:
+        df = df.with_columns(pl.lit(flat_min, pl.Int32).alias("min_att"))
+    return add_ranks(df, RANKED, "offense", pl.col("att") >= pl.col("min_att"), over=["bucket"])
