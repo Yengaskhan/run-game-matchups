@@ -134,3 +134,20 @@ def test_pfr_complete_weeks_stops_at_first_incomplete_week():
     pfr = pl.DataFrame({"game_id": ["g1", "g1", "g2", "g2", "g3"], "team": ["A", "B", "A", "B", "A"]})
     assert pfr_complete_weeks(pfr, ts, [1, 2, 3]) == ([1, 2], ["g3"])  # g3 is missing team B
     assert pfr_complete_weeks(pfr.filter(pl.col("game_id") != "g1"), ts, [1, 2, 3])[0] == []
+
+
+def test_rusher_split_is_per_player_ignores_qbs_and_ranks_within_bucket():
+    from matchups.metrics import rusher_split
+
+    rows = ([{"rusher_player_id": "a", "direction": "left", "epa": 0.5}] * 3 + [{"rusher_player_id": "a", "direction": "right", "epa": 0.1}]
+            + [{"rusher_player_id": "b", "direction": "left", "epa": -0.2}] * 3
+            + [{"rusher_player_id": "q", "direction": "left", "epa": 2.0, "is_qb_run": True}] * 5)
+    runs = runs_frame(rows)
+    games = pl.DataFrame({"team": ["AAA"], "games": [1]})
+    s = rusher_split(runs, "direction", ["left", "middle", "right"], games, by_team=True, per_game=2.0, flat_min=None)
+    a = s.filter(pl.col("rusher_player_id") == "a").sort("bucket")
+    assert a["att"].to_list() == [3, 0, 1] and a["share"].to_list() == [0.75, 0.0, 0.25]  # shares of HIS runs
+    assert "q" not in s["rusher_player_id"].to_list()  # QB runs are not in the RB peer group
+    left = s.filter(pl.col("bucket") == "left").sort("rusher_player_id")
+    assert left["epa_rank"].to_list() == [1, 2] and left["epa_n"].to_list() == [2, 2]
+    assert a.filter(pl.col("bucket") == "right")["epa_rank"].to_list() == [None]  # 1 carry < 2 per game

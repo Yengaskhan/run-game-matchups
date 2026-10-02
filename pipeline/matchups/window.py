@@ -10,7 +10,7 @@ import polars as pl
 
 from . import load
 from .config import BOX_BUCKETS, DIRECTIONS, GAPS, QUALIFIERS
-from .metrics import agg_exprs, ceil_min, league_split_avgs, overall, pfr_window, rushers, snap_shares, split, team_games, uncharted
+from .metrics import agg_exprs, ceil_min, rusher_split, league_split_avgs, overall, pfr_window, rushers, snap_shares, split, team_games, uncharted
 from .plays import designed_runs
 
 
@@ -24,6 +24,7 @@ class LeagueWindow:
     games: pl.DataFrame
     bucket_rule: str
     rusher_rule: str
+    rusher_bucket_rule: str
     data_as_of: str | None
     tables: dict[str, pl.DataFrame] = field(default_factory=dict)
     uncharted: dict[str, dict[str, int]] = field(default_factory=dict)
@@ -75,12 +76,14 @@ def build_window(season: int, weeks: list[int], is_current: bool, players: pl.Da
         bucket_rule = f"at least {QUALIFIERS['bucket_min_att_prior']} designed runs in that bucket"
     rper = QUALIFIERS["rusher_att_per_team_game"]
     rusher_rule = f"non-QB rushers with at least {rper:g} designed runs per team game"
+    rusher_bucket_rule = (f"non-QB rushers with at least {QUALIFIERS['rusher_bucket_att_per_team_game']:g} carries per team game in that bucket" if is_current
+                          else f"non-QB rushers with at least {QUALIFIERS['rusher_bucket_min_att_prior']} carries in that bucket")
 
     pfr_weeks = weeks if pfr_weeks is None else pfr_weeks
     pfr = pfr_window(load.pfr_rush_weekly(season), pfr_weeks, players) if pfr_weeks else None
     snaps = snap_shares(load.snap_counts(season), weeks, players) if (weeks and is_current) else None
 
-    w = LeagueWindow(season, weeks, is_current, runs, removed, games, bucket_rule, rusher_rule, data_as_of, pfr=pfr, pfr_weeks=pfr_weeks)
+    w = LeagueWindow(season, weeks, is_current, runs, removed, games, bucket_rule, rusher_rule, rusher_bucket_rule, data_as_of, pfr=pfr, pfr_weeks=pfr_weeks)
     if not weeks:
         return w
     box_ok = runs["box"].is_not_null().any()
@@ -94,6 +97,9 @@ def build_window(season: int, weeks: list[int], is_current: bool, players: pl.Da
         w.uncharted[f"off_{key}"] = uncharted(runs, "posteam", key)
         w.uncharted[f"def_{key}"] = uncharted(runs, "defteam", key)
         w.league[key] = league_split_avgs(runs, key)
+        # The starting RB's own splits, ranked among non-QB rushers in the same bucket.
+        w.tables[f"rb_{key}"] = rusher_split(runs, key, buckets, games, by_team=is_current,
+                                             per_game=QUALIFIERS["rusher_bucket_att_per_team_game"], flat_min=QUALIFIERS["rusher_bucket_min_att_prior"])
     w.tables["rushers"] = rushers(runs, games, pfr, snaps, rper, by_team=is_current)
     # Rusher x direction, for the per-rusher splits table (not ranked: samples are too small).
     w.tables["rusher_dir"] = (

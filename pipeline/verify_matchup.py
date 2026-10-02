@@ -56,18 +56,26 @@ def main(game_id: str) -> int:
     pfr["gsis_id"] = pfr.pfr_player_id.map(pfr_pos["gsis_id"])
     pfr["is_qb"] = pfr.pfr_player_id.map(pfr_pos["position"]).eq("QB")
 
-    # Direction EPA ranks, recomputed independently for the Run Edge check.
+    # Ranks recomputed independently: RBs (non-QB rushers, per team) and defenses, by direction.
     games_played = pd.concat([pbp[["game_id", "posteam"]].rename(columns={"posteam": "team"}), pbp[["game_id", "defteam"]].rename(columns={"defteam": "team"})]).dropna().drop_duplicates().groupby("team").size()
-    min_att = {t: math.ceil(3.0 * n - 1e-9) for t, n in games_played.items()}
+    nonqb = runs[~runs.qb]
 
-    def pct_rank(col, team, loc, higher_better):
-        dd = runs[runs.run_location == loc].groupby(col).epa.agg(["mean", "size"])
-        dd = dd[[dd.loc[t, "size"] >= min_att[t] for t in dd.index]]
-        if team not in dd.index:
-            return None
-        r = (dd["mean"] > dd.loc[team, "mean"]).sum() + 1 if higher_better else (dd["mean"] < dd.loc[team, "mean"]).sum() + 1
-        n = len(dd)
-        return 1.0 if n == 1 else 1 - (r - 1) / (n - 1)
+    def pct(values, me, higher_better):
+        r = (values > values[me]).sum() + 1 if higher_better else (values < values[me]).sum() + 1
+        n = len(values)
+        return r, n, (1.0 if n == 1 else 1 - (r - 1) / (n - 1))
+
+    def rb_rank(pid, team, loc=None, per_game=6.25):
+        df = nonqb if loc is None else nonqb[nonqb.run_location == loc]
+        gg = df.groupby(["rusher_player_id", "posteam"]).epa.agg(["mean", "size"]).reset_index()
+        gg = gg[gg["size"] >= gg.posteam.map(lambda t: math.ceil(per_game * games_played[t] - 1e-9))]
+        gg = gg.set_index(["rusher_player_id", "posteam"])["mean"]
+        return pct(gg, (pid, team), True) if (pid, team) in gg.index else None
+
+    def def_rank(team, loc):
+        dd = runs[runs.run_location == loc].groupby("defteam").epa.agg(["mean", "size"])
+        dd = dd[[dd.loc[t, "size"] >= math.ceil(3.0 * games_played[t] - 1e-9) for t in dd.index]]["mean"]
+        return pct(dd, team, False) if team in dd.index else None
 
     ppbp = nfl.load_pbp([prior]).to_pandas()
     ppbp = ppbp[ppbp.season_type == "REG"]
@@ -78,73 +86,65 @@ def main(game_id: str) -> int:
         off, dfn = row["offense"], row["defense"]
         b = row["seasons"][str(season)]
         splits = {(s["group"], s["key"]): s for s in b["splits"]}
+        pid, name = row["starter"]["id"], row["starter"]["name"]
+        check(f"{off} starter = depth-chart RB1 ({name})", 1, int(b["subject"]["id"] == pid), 0)
 
-        # Offense overall + league EPA rank (all 32 teams).
-        o = summarize(runs[runs.posteam == off])
-        for k, v in o.items():
-            check(f"{off} offense {k}", v, b["overall"]["off"][k])
-        team_epa = runs.groupby("posteam").epa.mean().sort_values(ascending=False)
-        check(f"{off} offense EPA rank", list(team_epa.index).index(off) + 1, b["overall"]["off"]["ranks"]["epa"][0], 0)
-        check(f"{off} offense EPA peer group", len(team_epa), b["overall"]["off"]["ranks"]["epa"][1], 0)
+        # Starting RB overall: HIS designed runs for this team only, ranked among qualifying non-QB rushers.
+        mine = runs[(runs.posteam == off) & (runs.rusher_player_id == pid)]
+        for k, v in summarize(mine).items():
+            check(f"{name} {k}", v, b["overall"]["off"][k])
+        check(f"{name} carry share", len(mine) / len(runs[runs.posteam == off]), b["overall"]["off"]["carry_share"])
+        rk = rb_rank(pid, off)
+        check(f"{name} EPA rank among RBs", rk[0] if rk else None, b["overall"]["off"]["ranks"].get("epa", [None])[0], 0)
+        check(f"{name} RB peer group", rk[1] if rk else None, b["overall"]["off"]["ranks"].get("epa", [None, None])[1], 0)
+        pp = pfr[(pfr.gsis_id == pid) & (pfr.team == off)]
+        check(f"{name} YBC/att (PFR)", pp.rushing_yards_before_contact.sum() / pp.carries.sum() if len(pp) else None, b["overall"]["off"]["ybc_att"])
+        check(f"{name} YAC/att (PFR)", pp.rushing_yards_after_contact.sum() / pp.carries.sum() if len(pp) else None, b["overall"]["off"]["yac_att"])
 
-        # Offense totals reconcile with nflverse team_stats (all rushes, before filtering).
+        # Team totals still reconcile with nflverse team_stats (all rushes, before filtering).
         allr = pbp[f("rush_attempt") & (pbp.posteam == off)]
         t = ts[ts.team == off]
         check(f"{off} all rush attempts vs team_stats carries", len(allr), t.carries.sum(), 2)
         check(f"{off} all rushing yards vs team_stats", allr.rushing_yards.fillna(0).sum(), t.rushing_yards.sum(), 3)
 
-        # Defense overall.
+        # Defense overall (against every rusher).
         d = summarize(runs[runs.defteam == dfn])
         for k, v in d.items():
             check(f"{dfn} defense {k} allowed", v, b["overall"]["def"][k])
         def_epa = runs.groupby("defteam").epa.mean().sort_values()
         check(f"{dfn} defense EPA rank", list(def_epa.index).index(dfn) + 1, b["overall"]["def"]["ranks"]["epa"][0], 0)
-
-        # YBC allowed (PFR, non-QB).
         p = pfr[(pfr.opponent == dfn) & ~pfr.is_qb]
         check(f"{dfn} YBC/att allowed (PFR, non-QB)", p.rushing_yards_before_contact.sum() / p.carries.sum(), b["overall"]["def"]["ybc_att"])
 
-        # Direction shares and EPA (offense perspective) for both units, then the Run Edge.
-        edges, shares_off = {}, {}
-        for unit, team, col in [("off", off, "posteam"), ("def", dfn, "defteam")]:
-            dd = runs[(runs[col] == team) & runs.run_location.notna()]
-            shares = dd.run_location.value_counts(normalize=True)
-            for loc in ["left", "middle", "right"]:
-                sp = splits[("direction", loc)][unit]
-                check(f"{team} {unit} {loc} share", shares.get(loc, 0.0), sp["share"])
-                sub = dd[dd.run_location == loc]
-                check(f"{team} {unit} {loc} EPA", sub.epa.mean() if len(sub) else None, sp["epa"])
-                if unit == "off":
-                    shares_off[loc] = shares.get(loc, 0.0)
+        # Direction shares / EPA (offense perspective), then the Run Edge from independent ranks.
+        mine_dir = mine[mine.run_location.notna()]
+        rb_shares = mine_dir.run_location.value_counts(normalize=True)
+        dd = runs[(runs.defteam == dfn) & runs.run_location.notna()]
+        def_shares = dd.run_location.value_counts(normalize=True)
+        edges = {}
         for loc in ["left", "middle", "right"]:
-            po, pd_ = pct_rank("posteam", off, loc, True), pct_rank("defteam", dfn, loc, False)
-            edges[loc] = None if po is None or pd_ is None else round(50 + 50 * (po - pd_))
-            check(f"{off} vs {dfn} {loc} edge", edges[loc], splits[("direction", loc)]["edge"], 0)
-        cov = sum(shares_off[x] for x in edges if edges[x] is not None)
-        run_edge = round(sum(edges[x] * shares_off[x] for x in edges if edges[x] is not None) / cov) if cov else None
-        check(f"{off} vs {dfn} Run Edge", run_edge, b["run_edge"], 0)
+            sp = splits[("direction", loc)]
+            sub = mine_dir[mine_dir.run_location == loc]
+            check(f"{name} {loc} share", rb_shares.get(loc, 0.0), sp["off"]["share"])
+            check(f"{name} {loc} EPA", sub.epa.mean() if len(sub) else None, sp["off"]["epa"])
+            check(f"{dfn} defense {loc} share", def_shares.get(loc, 0.0), sp["def"]["share"])
+            o_r, d_r = rb_rank(pid, off, loc, per_game=2.0), def_rank(dfn, loc)
+            edges[loc] = None if o_r is None or d_r is None else round(50 + 50 * (o_r[2] - d_r[2]))
+            check(f"{name} vs {dfn} {loc} edge", edges[loc], sp["edge"], 0)
+        cov = sum(rb_shares.get(x, 0.0) for x in edges if edges[x] is not None)
+        run_edge = round(sum(edges[x] * rb_shares.get(x, 0.0) for x in edges if edges[x] is not None) / cov) if cov else None
+        check(f"{name} vs {dfn} Run Edge", run_edge, b["run_edge"], 0)
 
-        # Lead rusher: attempts, YPC, carry share, YBC/YAC.
-        backs = [r for r in b["rushers"] if r["kind"] in ("rb", "other")]
-        lead = max(backs, key=lambda r: r["att"])
-        mine = runs[(runs.posteam == off) & (runs.rusher_player_id == lead["id"])]
-        check(f"{lead['name']} designed runs", len(mine), lead["att"], 0)
-        check(f"{lead['name']} YPC", mine.yards.mean(), lead["ypc"])
-        check(f"{lead['name']} carry share", len(mine) / len(runs[runs.posteam == off]), lead["carry_share"])
-        pp = pfr[(pfr.gsis_id == lead["id"]) & (pfr.team == off)]
-        check(f"{lead['name']} YBC/att (PFR)", pp.rushing_yards_before_contact.sum() / pp.carries.sum(), lead["ybc_att"])
-        check(f"{lead['name']} YAC/att (PFR)", pp.rushing_yards_after_contact.sum() / pp.carries.sum(), lead["yac_att"])
+        # Backs table still adds up to the team's designed runs.
         total = next(r for r in b["rushers"] if r["kind"] == "total")
-        check(f"{off} rusher rows sum to team designed runs", sum(r["att"] for r in b["rushers"] if r["kind"] != "total"), total["att"], 0)
-        qb = runs[(runs.posteam == off) & runs.qb]
-        check(f"{off} designed QB runs", len(qb), next((r["att"] for r in b["rushers"] if r["kind"] == "qb"), 0), 0)
+        check(f"{off} backs table sums to team designed runs", sum(r["att"] for r in b["rushers"] if r["kind"] != "total"), total["att"], 0)
 
-        # Prior season is a separate block: offense over the full prior regular season.
+        # Prior season is a separate block: the same RB's full prior-season line (any team).
         pb = row["seasons"][str(prior)]
-        pr = pruns[pruns.posteam == off]
-        check(f"{off} {prior} designed runs", len(pr), pb["overall"]["off"]["att"], 0)
-        check(f"{off} {prior} EPA/run", pr.epa.mean(), pb["overall"]["off"]["epa"])
-        check(f"{off} {prior} block labeled {prior}", prior, pb["season"], 0)
+        pr = pruns[pruns.rusher_player_id == pid]
+        check(f"{name} {prior} designed runs", len(pr), pb["overall"]["off"]["att"], 0)
+        check(f"{name} {prior} EPA/run", pr.epa.mean() if len(pr) else None, pb["overall"]["off"]["epa"])
+        check(f"{name} {prior} block labeled {prior}", prior, pb["season"], 0)
 
     width = max(len(r[1]) for r in results)
     for ok, label, ours, theirs in results:

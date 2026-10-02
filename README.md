@@ -1,6 +1,6 @@
 # ClevAnalytics Run Game Matchup Report
 
-A weekly matchup report as its own website. Pick a week and every offense playing gets one row: its run game (RBs and offensive line) against the opposing run defense, scored as a Run Edge, with a View button for the details. It uses free [nflverse](https://nflverse.nflverse.com/) data only.
+A weekly matchup report as its own website. Pick a week and every team playing gets one row: its starting RB, on his own carries, against the opposing run defense, scored as a Run Edge, with a View button for the details. It uses free [nflverse](https://nflverse.nflverse.com/) data only.
 
 It has two parts:
 - **Pipeline** (`pipeline/`, Python + [nflreadpy](https://github.com/nflverse/nflreadpy)): pulls nflverse data, computes everything, runs the validation checks, and writes one JSON file per week to `data/<season>/week-XX.json` (every offense playing that week, with both seasons' numbers), plus `data/<season>/index.json`.
@@ -106,6 +106,8 @@ Every tunable number is in `pipeline/matchups/config.py`. Edit it, then re-run t
 | `QUALIFIERS["rusher_att_per_team_game"]` | 6.25 | Non-QB rushers are ranked with ≥ 6.25 designed runs per team game (the NFL rushing-title standard: 13 after 2 games, 107 over 17) |
 | `QUALIFIERS["bucket_att_per_team_game"]` | 3.0 | A team's direction/gap/box bucket is ranked with ≥ 3 runs per team game in it (current season) |
 | `QUALIFIERS["bucket_min_att_prior"]` | 25 | Same, prior season (flat) |
+| `QUALIFIERS["rusher_bucket_att_per_team_game"]` | 2.0 | The starting RB's own direction/gap/box bucket is ranked with ≥ 2 carries per team game in it (current season) |
+| `QUALIFIERS["rusher_bucket_min_att_prior"]` | 20 | Same, prior season (flat) |
 | `EDGE["bands"]` | 70 / 58 / 43 / 31 | Run Edge colour bands: big edge ≥ 70, small edge ≥ 58, neutral 43–57, small disadvantage 31–42, big disadvantage ≤ 30 |
 | `EDGE["min_coverage"]` | 0.5 | The headline Run Edge is shaded only when ranked directions cover ≥ 50% of the offense's runs (else grey "small sample") |
 | `EDGE["min_share"]` | 0.10 | Detail takeaways only consider gaps the offense uses on ≥ 10% of its runs |
@@ -129,18 +131,24 @@ Every row still shows its numbers; a row that misses the qualifier just shows ra
 - **Snap share** comes from nflverse snap counts; **depth-chart order** from nflverse depth charts (the snapshot before kickoff day for a played game, else the latest).
 - **Takeaways** (at most two per matchup) are fixed templates filled from the numbers. No LLM is involved.
 
+## Whose numbers
+
+- **RB side:** the starting RB only. That's RB1 on the nflverse depth chart, using the snapshot before kickoff day for games already played. It counts his own designed runs: for this team in the current season, and his full line for any team in the prior season. QB runs and backups are left out. He's ranked among non-QB rushers with enough carries, overall (6.25 per team game) and in each direction / gap / box bucket (2 per team game; 20 in the prior season).
+- **Defense side:** the defense against every rusher, ranked among the 32 defenses.
+- **Backs table** (under View): every back on the team, with QB runs and the team total, for context.
+
 ## Run Edge
 
-A 0–100 score, 50 = even, shaded green (offense edge) to orange (defense edge).
+A 0–100 score, 50 = even, shaded green (RB edge) to orange (defense edge).
 
-- **Per bucket** (a direction, gap or box count): `50 + 50 × (offense EPA/run percentile − defense EPA-allowed percentile)`. Each percentile comes from its own ranked table (1 = best offense / stingiest defense), so a top offense meeting the leakiest defense in that bucket scores 100. It's blank when either side is below the rank qualifier.
-- **Headline Run Edge:** the left / middle / right edges, averaged with weights from how often the offense runs each way. When the ranked directions cover less than half of the offense's runs, the badge shows grey with a dashed border ("small sample").
+- **Per bucket** (a direction, gap or box count): `50 + 50 × (RB EPA/run percentile among RBs − defense EPA-allowed percentile among defenses)`. Each percentile comes from its own ranked table, so a top RB meeting the leakiest defense in that bucket scores 100. It's blank when either side is below the rank qualifier.
+- **Headline Run Edge:** the left / middle / right edges, averaged with weights from how often the RB runs each way. When the ranked directions cover less than half of the RB's runs, the badge shows grey with a dashed border ("small sample").
 - The **Split** selector (Left / Middle / Right) swaps the table to that one direction's numbers and edge.
 
 ## Report layout
 
 - **Header:** week, **Season** selector (current season to date, or the full prior season; never combined), **Split** selector, **Find team** box, and the colour legend.
-- **Main table:** one row per offense playing that week, led by its starting RB (RB1 on the nflverse depth chart, with his carries and share of the team's designed runs), then opponent, offense EPA/run and defense EPA allowed (each with rank/peer group and attempts), main run direction, and Run Edge. Every column sorts.
+- **Main table:** one row per offense playing that week, led by its starting RB (RB1 on the nflverse depth chart, with his carries and share of the team's designed runs), then opponent, the RB's EPA/run (ranked among RBs) and the defense's EPA allowed (ranked among defenses), each with attempts, his main run direction, and Run Edge. Every column sorts.
 - **View** opens the detail under the row:
   - one-line stat strips for the offense and the defense (EPA, success, YPC, explosive, stuffed, YBC, YAC, with ranks)
   - one table of direction / gap / box splits: offense | defense | edge

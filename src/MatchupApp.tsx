@@ -203,7 +203,7 @@ export default function MatchupApp() {
                 {index.season} Week {week} preview
               </p>
               <h1 className="text-[22px] font-semibold tracking-tight">Run Game Matchup Report</h1>
-              <p className="text-[12px] text-ink-2">Each offense's designed runs against the opponent's run defense, by where the run goes.</p>
+              <p className="text-[12px] text-ink-2">Each team's starting RB, on his own carries, against the opponent's run defense, by where he runs.</p>
             </div>
             <div className="flex flex-wrap items-end gap-3">
               <Select label="Week" value={String(week ?? '')} onChange={(v) => (setWeek(Number(v)), setOpen(null))}
@@ -249,7 +249,7 @@ export default function MatchupApp() {
                     <tr className="text-left">
                       <Th k="offense" className="sticky left-0 z-10 bg-panel-2">Starting RB</Th>
                       <Th k="defense" className="hidden sm:table-cell">Opponent</Th>
-                      <Th k="off_epa" className="text-right">{splitLabel ? `Off EPA · ${splitLabel}` : 'Off EPA/run'}</Th>
+                      <Th k="off_epa" className="text-right">{splitLabel ? `RB EPA · ${splitLabel}` : 'RB EPA/run'}</Th>
                       <Th k="def_epa" className="text-right">{splitLabel ? `Def EPA al. · ${splitLabel}` : 'Def EPA allowed'}</Th>
                       <Th k="share" className="text-right">{splitLabel ? `${splitLabel} share` : 'Main direction'}</Th>
                       <Th k="edge" className="text-center">Run edge</Th>
@@ -383,6 +383,7 @@ function Detail({ row, b, report, onClose }: { row: MatchupRow; b: SeasonBlock; 
   const dfn = row.defense;
   const o = b.overall.off;
   const d = b.overall.def;
+  const rb = b.subject?.name ?? teamName(off);
   const groups: [Split['group'], string][] = [
     ['direction', 'Direction'],
     ['gap', 'Gap'],
@@ -393,7 +394,7 @@ function Detail({ row, b, report, onClose }: { row: MatchupRow; b: SeasonBlock; 
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
           <h2 className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[16px] font-semibold">
-            <TeamLogo team={off} size={28} /> {teamName(off)} run game <span className="text-ink-3">{row.home ? 'vs' : '@'}</span>
+            <TeamLogo team={off} size={28} /> {rb} <span className="text-[13px] font-normal text-ink-3">({off})</span> <span className="text-ink-3">{row.home ? 'vs' : '@'}</span>
             <TeamLogo team={dfn} size={28} /> {teamName(dfn)} run defense
           </h2>
           <p className="text-[11.5px] text-ink-3">
@@ -408,8 +409,8 @@ function Detail({ row, b, report, onClose }: { row: MatchupRow; b: SeasonBlock; 
       </div>
 
       <div className="mt-3 grid gap-2 md:grid-cols-2">
-        <StatStrip title={`${off} offense`} m={o} kind="offense" pfrNote={pfrNote} />
-        <StatStrip title={`${dfn} defense allowed`} m={d} kind="defense" pfrNote={pfrNote} />
+        <StatStrip title={rb} m={o} kind="offense" pfrNote={pfrNote} team={off} />
+        <StatStrip title={`${dfn} defense allowed`} m={d} kind="defense" pfrNote={pfrNote} team={dfn} />
       </div>
 
       <div className="mt-3 overflow-x-auto rounded border border-line">
@@ -417,7 +418,7 @@ function Detail({ row, b, report, onClose }: { row: MatchupRow; b: SeasonBlock; 
           <thead className="bg-panel-2/70 text-[10.5px] uppercase tracking-wider text-ink-3">
             <tr>
               <th rowSpan={2} className="sticky left-0 z-10 bg-panel-2 px-3 py-1.5 text-left font-medium">Split</th>
-              <th colSpan={5} className="border-l border-line px-2 py-1.5 font-medium text-ink-2">{off} offense</th>
+              <th colSpan={5} className="border-l border-line px-2 py-1.5 font-medium text-ink-2" title="His own carries only; ranks are among RBs">{rb}</th>
               <th colSpan={5} className="border-l border-line px-2 py-1.5 font-medium text-ink-2">{dfn} defense</th>
               <th rowSpan={2} className="border-l border-line px-2 py-1.5 font-medium" title={report.edge.definition}>Edge</th>
             </tr>
@@ -484,7 +485,7 @@ function SplitCells({ m, first }: { m: Metrics; first?: boolean }) {
   );
 }
 
-function StatStrip({ title, m, kind, pfrNote }: { title: string; m: SeasonBlock['overall']['off']; kind: 'offense' | 'defense'; pfrNote: string | null }) {
+function StatStrip({ title, m, kind, pfrNote, team }: { title: string; m: SeasonBlock['overall']['off']; kind: 'offense' | 'defense'; pfrNote: string | null; team: string }) {
   const items: [string, number | null, Parameters<typeof formatCell>[1], Rank | undefined][] = [
     ['EPA/run', m.epa, 'epa', m.ranks.epa],
     ['Success', m.sr, 'pct', m.ranks.sr],
@@ -497,9 +498,19 @@ function StatStrip({ title, m, kind, pfrNote }: { title: string; m: SeasonBlock[
   return (
     <div className="rounded border border-line bg-panel px-3 py-2">
       <p className="text-[11px] text-ink-3">
-        <span className="font-semibold text-ink">{title}</span> · {m.att} designed runs, {m.games} games
+        <span className="font-semibold text-ink">{title}</span>
+        {kind === 'offense' ? (
+          <>
+            {' '}· {m.att} carries{m.games ? `, ${m.games} games` : ''}
+            {m.carry_share != null && ` · ${formatCell(m.carry_share, 'pct')} of ${team} designed runs`}
+            {m.snap_share != null && `, ${formatCell(m.snap_share, 'pct')} of snaps`} · ranks among RBs
+          </>
+        ) : (
+          <>
+            {' '}· {m.att} designed runs faced, {m.games} games{m.qb_att ? ` (${m.qb_att} by QBs)` : ''} · ranks among defenses
+          </>
+        )}
         {pfrNote && <span className="text-warn"> · {pfrNote}</span>}
-        {m.qb_att ? ` · ${m.qb_att} QB runs` : ''}
       </p>
       <dl className="num mt-1 grid grid-cols-4 gap-x-3 gap-y-1.5 sm:grid-cols-7">
         {items.map(([k, v, f, r]) => (
