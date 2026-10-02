@@ -73,6 +73,8 @@ export interface MatchupRow {
   offense: string;
   defense: string;
   home: boolean;
+  /** Starting RB: RB1 on the depth chart. Null when the team has no RB listed. */
+  starter: { id: string; name: string } | null;
   seasons: Record<string, SeasonBlock | null>;
 }
 

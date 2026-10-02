@@ -140,7 +140,7 @@ A 0–100 score, 50 = even, shaded green (offense edge) to orange (defense edge)
 ## Report layout
 
 - **Header:** week, **Season** selector (current season to date, or the full prior season; never combined), **Split** selector, **Find team** box, and the colour legend.
-- **Main table:** one row per offense playing that week, with opponent, offense EPA/run and defense EPA allowed (each with rank/peer group and attempts), main run direction, and Run Edge. Every column sorts.
+- **Main table:** one row per offense playing that week, led by its starting RB (RB1 on the nflverse depth chart, with his carries and share of the team's designed runs), then opponent, offense EPA/run and defense EPA allowed (each with rank/peer group and attempts), main run direction, and Run Edge. Every column sorts.
 - **View** opens the detail under the row:
   - one-line stat strips for the offense and the defense (EPA, success, YPC, explosive, stuffed, YBC, YAC, with ranks)
   - one table of direction / gap / box splits: offense | defense | edge

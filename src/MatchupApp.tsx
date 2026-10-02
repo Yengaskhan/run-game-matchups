@@ -132,11 +132,13 @@ export default function MatchupApp() {
   const rows = useMemo(() => {
     if (!report) return [];
     const q = query.trim().toUpperCase();
-    const list = report.rows.filter((r) => !q || r.offense.includes(q) || r.defense.includes(q)).map((r) => ({ r, s: summary(r) }));
+    const list = report.rows
+      .filter((r) => !q || r.offense.includes(q) || r.defense.includes(q) || (r.starter?.name.toUpperCase().includes(q) ?? false))
+      .map((r) => ({ r, s: summary(r) }));
     const val = (x: (typeof list)[number]): number | string | null => {
       switch (sort.key) {
         case 'offense':
-          return x.r.offense;
+          return x.r.starter?.name ?? x.r.offense;
         case 'defense':
           return x.r.defense;
         case 'off_epa':
@@ -212,8 +214,8 @@ export default function MatchupApp() {
               <Select label="Split" value={split} onChange={(v) => setSplit(v as SplitKey)}
                 options={[['all', 'All runs'], ['left', 'Left'], ['middle', 'Middle'], ['right', 'Right']]} />
               <label className="flex flex-col gap-1 text-[10.5px] font-medium uppercase tracking-wider text-ink-3">
-                Find team
-                <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="e.g. BAL" className="h-8 w-32 rounded border border-line-2 bg-panel-2 px-2 text-[13px] normal-case tracking-normal text-ink placeholder:text-ink-3" />
+                Find team or RB
+                <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Team or RB" className="h-8 w-32 rounded border border-line-2 bg-panel-2 px-2 text-[13px] normal-case tracking-normal text-ink placeholder:text-ink-3" />
               </label>
             </div>
           </div>
@@ -245,7 +247,7 @@ export default function MatchupApp() {
                 <table className="num w-full min-w-[760px] border-collapse text-[12.5px]">
                   <thead className="border-b border-line bg-panel-2/60">
                     <tr className="text-left">
-                      <Th k="offense" className="sticky left-0 z-10 bg-panel-2">Offense</Th>
+                      <Th k="offense" className="sticky left-0 z-10 bg-panel-2">Starting RB</Th>
                       <Th k="defense" className="hidden sm:table-cell">Opponent</Th>
                       <Th k="off_epa" className="text-right">{splitLabel ? `Off EPA · ${splitLabel}` : 'Off EPA/run'}</Th>
                       <Th k="def_epa" className="text-right">{splitLabel ? `Def EPA al. · ${splitLabel}` : 'Def EPA allowed'}</Th>
@@ -264,14 +266,20 @@ export default function MatchupApp() {
                           <tr className={`border-t border-line/70 ${isOpen ? 'bg-panel-2/60' : 'hover:bg-panel-2/40'}`}>
                             <th scope="row" className={`sticky left-0 z-10 px-3 py-2 text-left font-semibold ${isOpen ? 'bg-[#141a23]' : 'bg-panel'}`}>
                               <span className="flex items-center justify-between gap-3">
-                                <span className="flex items-center gap-2" title={teamName(r.offense)}>
-                                  <TeamLogo team={r.offense} size={24} />
-                                  <span className="text-[14px]">{r.offense}</span>
+                                <span className="flex items-center gap-2.5" title={teamName(r.offense)}>
+                                  <TeamLogo team={r.offense} size={28} />
+                                  <span>
+                                    <span className="block text-[14px] leading-tight">{r.starter?.name ?? `${r.offense} (no RB listed)`}</span>
+                                    <span className="block text-[11px] font-normal text-ink-2">
+                                      {r.offense}
+                                      {starterLine(r, s?.b ?? null)}
+                                    </span>
+                                  </span>
                                 </span>
                                 {/* Phones: the edge column is off-screen, so show the badge here too. */}
                                 <span className="sm:hidden">{s ? <EdgeBadge edge={s.edge} band={s.band} small={s.small} /> : null}</span>
                               </span>
-                              <span className="block text-[10.5px] font-normal text-ink-3">
+                              <span className="block pl-[38px] text-[10.5px] font-normal text-ink-3">
                                 <span className="sm:hidden">{r.home ? 'vs' : '@'} {r.defense} · </span>
                                 {g ? `${formatDate(g.gameday, { weekday: 'short' })} ${formatKickoff(g.gametime)}` : ''}
                               </span>
@@ -335,6 +343,15 @@ export default function MatchupApp() {
       </main>
     </div>
   );
+}
+
+/** " · 40 carries, 82% of runs" for the starter in the selected season ("in 2025" for the prior season, any team). */
+function starterLine(r: MatchupRow, b: SeasonBlock | null): string {
+  if (!r.starter || !b) return '';
+  const p = b.rushers.find((x) => x.id === r.starter!.id);
+  const current = b.rushers.some((x) => x.kind === 'total'); // only current-season blocks carry a team total row
+  if (!p?.att) return current ? ' · no carries yet' : ` · no ${b.season} carries`;
+  return current ? ` · ${p.att} carries, ${formatCell(p.carry_share ?? null, 'pct')} of runs` : ` · ${p.att} carries in ${b.season}`;
 }
 
 function Select({ label, value, onChange, options }: { label: string; value: string; onChange: (v: string) => void; options: [string, string][] }) {

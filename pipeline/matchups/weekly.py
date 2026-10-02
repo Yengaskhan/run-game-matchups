@@ -169,6 +169,8 @@ def week_report(season: int, week: int, games: list[dict], cur: LeagueWindow, pr
                 or [{"id": d["gsis_id"], "name": d["name"]} for d in dep]
             rows.append({
                 "game_id": g["game_id"], "offense": off, "defense": dfn, "home": home,
+                # Starting RB: RB1 on the nflverse depth chart (latest snapshot; before kickoff day for played games).
+                "starter": {"id": dep[0]["gsis_id"], "name": dep[0]["name"]} if dep else None,
                 "seasons": {str(cur.season): cur_block, str(prior.season): side_block(prior, off, dfn, dep, players)},
             })
     bands = [{"key": k, "label": label, "min": lo} for k, label, lo in EDGE["bands"]]

@@ -42,6 +42,8 @@ describe.each(seasons)('matchup reports %s', (season) => {
     }
 
     for (const row of r.rows) {
+      // Starting RB (depth-chart RB1) is present on every row, or explicitly null.
+      expect(row.starter === null || (typeof row.starter?.id === 'string' && row.starter.name.length > 0), `${row.offense} starter`).toBe(true);
       for (const meta of r.seasons) {
         const b = row.seasons[String(meta.season)];
         const where = `week ${r.week} ${row.offense} vs ${row.defense} (${meta.season})`;
