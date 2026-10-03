@@ -14,7 +14,7 @@ const embedded = (() => {
 })();
 
 type SplitKey = 'all' | 'left' | 'middle' | 'right';
-type SortKey = 'offense' | 'defense' | 'off_epa' | 'def_epa' | 'share' | 'edge';
+type SortKey = 'offense' | 'defense' | 'off_sr' | 'off_ypc' | 'def_sr' | 'def_ypc' | 'share' | 'edge';
 
 /** Selection lives in the URL hash so a view can be linked directly. */
 function readHash() {
@@ -141,10 +141,15 @@ export default function MatchupApp() {
           return x.r.starter?.name ?? x.r.offense;
         case 'defense':
           return x.r.defense;
-        case 'off_epa':
-          return x.s?.off.epa ?? null;
-        case 'def_epa':
-          return x.s?.def.epa ?? null;
+        case 'off_sr':
+          return x.s?.off.sr ?? null;
+        case 'off_ypc':
+          return x.s?.off.ypc ?? null;
+        // Defense columns: lower allowed is better, so sorting "best first" means ascending.
+        case 'def_sr':
+          return x.s?.def.sr == null ? null : -x.s.def.sr;
+        case 'def_ypc':
+          return x.s?.def.ypc == null ? null : -x.s.def.ypc;
         case 'share':
           return x.s?.share?.share ?? null;
         case 'edge':
@@ -192,7 +197,7 @@ export default function MatchupApp() {
         </div>
       </header>
 
-      <main className="mx-auto w-full max-w-[1200px] flex-1 px-4 py-5">
+      <main className="mx-auto w-full max-w-[1320px] flex-1 px-4 py-5">
         {!index && <p className="text-ink-2">No reports yet. Run the pipeline (see README) and commit data/.</p>}
         {error && <p className="text-bad">{error}</p>}
 
@@ -244,13 +249,15 @@ export default function MatchupApp() {
               <p className="mt-4 rounded-md border border-line bg-panel px-3 py-3 text-[12.5px] text-ink-2">{seasonMeta.empty}</p>
             ) : (
               <div className="mt-3 overflow-x-auto rounded-md border border-line bg-panel">
-                <table className="num w-full min-w-[760px] border-collapse text-[12.5px]">
+                <table className="num w-full min-w-[1040px] border-collapse text-[12.5px]">
                   <thead className="border-b border-line bg-panel-2/60">
                     <tr className="text-left">
                       <Th k="offense" className="sticky left-0 z-10 bg-panel-2">Starting RB</Th>
                       <Th k="defense" className="hidden sm:table-cell">Opponent</Th>
-                      <Th k="off_epa" className="text-right">{splitLabel ? `RB EPA · ${splitLabel}` : 'RB EPA/run'}</Th>
-                      <Th k="def_epa" className="text-right">{splitLabel ? `Def EPA al. · ${splitLabel}` : 'Def EPA allowed'}</Th>
+                      <Th k="off_sr" className="text-right">{splitLabel ? `RB Succ. · ${splitLabel}` : 'RB Success'}</Th>
+                      <Th k="off_ypc" className="text-right">{splitLabel ? `RB YPC · ${splitLabel}` : 'RB YPC'}</Th>
+                      <Th k="def_sr" className="text-right">{splitLabel ? `Def Succ. al. · ${splitLabel}` : 'Def Succ. allowed'}</Th>
+                      <Th k="def_ypc" className="text-right">{splitLabel ? `Def YPC al. · ${splitLabel}` : 'Def YPC allowed'}</Th>
                       <Th k="share" className="text-right">{splitLabel ? `${splitLabel} share` : 'Main direction'}</Th>
                       <Th k="edge" className="text-center">Run edge</Th>
                       <Th className="text-center">View</Th>
@@ -269,8 +276,8 @@ export default function MatchupApp() {
                                 <span className="flex items-center gap-2.5" title={teamName(r.offense)}>
                                   <TeamLogo team={r.offense} size={28} />
                                   <span>
-                                    <span className="block text-[14px] leading-tight">{r.starter?.name ?? `${r.offense} (no RB listed)`}</span>
-                                    <span className="block text-[11px] font-normal text-ink-2">
+                                    <span className="block whitespace-nowrap text-[14px] leading-tight">{r.starter?.name ?? `${r.offense} (no RB listed)`}</span>
+                                    <span className="block whitespace-nowrap text-[11px] font-normal text-ink-2">
                                       {r.offense}
                                       {starterLine(r, s?.b ?? null)}
                                     </span>
@@ -289,8 +296,10 @@ export default function MatchupApp() {
                                 {r.home ? 'vs' : '@'} <TeamLogo team={r.defense} size={20} /> <span className="font-semibold text-ink">{r.defense}</span>
                               </span>
                             </td>
-                            <td className="px-3 py-2 text-right">{s ? <Stat v={s.off.epa} fmt="epa" rank={s.off.ranks.epa} n={s.off.att} /> : '—'}</td>
-                            <td className="px-3 py-2 text-right">{s ? <Stat v={s.def.epa} fmt="epa" rank={s.def.ranks.epa} n={s.def.att} /> : '—'}</td>
+                            <td className="px-3 py-2 text-right">{s ? <Stat v={s.off.sr} fmt="pct" rank={s.off.ranks.sr} n={s.off.att} /> : '—'}</td>
+                            <td className="px-3 py-2 text-right">{s ? <Stat v={s.off.ypc} fmt="dec1" rank={s.off.ranks.ypc} /> : '—'}</td>
+                            <td className="px-3 py-2 text-right">{s ? <Stat v={s.def.sr} fmt="pct" rank={s.def.ranks.sr} n={s.def.att} /> : '—'}</td>
+                            <td className="px-3 py-2 text-right">{s ? <Stat v={s.def.ypc} fmt="dec1" rank={s.def.ranks.ypc} /> : '—'}</td>
                             <td className="px-3 py-2 text-right">
                               {s?.share ? (
                                 <>
@@ -307,7 +316,7 @@ export default function MatchupApp() {
                                 type="button"
                                 aria-expanded={isOpen}
                                 onClick={() => setOpen(isOpen ? null : id)}
-                                className={`inline-flex h-7 items-center gap-1 rounded border px-2.5 text-[12px] ${isOpen ? 'border-accent/70 bg-accent/10 text-ink' : 'border-line-2 text-ink-2 hover:border-ink-3 hover:text-ink'}`}
+                                className={`inline-flex h-7 items-center gap-1 whitespace-nowrap rounded border px-2.5 text-[12px] ${isOpen ? 'border-accent/70 bg-accent/10 text-ink' : 'border-line-2 text-ink-2 hover:border-ink-3 hover:text-ink'}`}
                               >
                                 {isOpen ? 'Hide ▴' : 'View ▾'}
                               </button>
@@ -315,7 +324,7 @@ export default function MatchupApp() {
                           </tr>
                           {isOpen && s && (
                             <tr>
-                              <td colSpan={7} className="border-t border-line bg-bg/60 p-0">
+                              <td colSpan={9} className="border-t border-line bg-bg/60 p-0">
                                 {/* Pinned to the visible width, so on phones it doesn't scroll sideways with the list. */}
                                 <div className="sticky left-0 max-w-[calc(100vw-2rem-2px)]">
                                   <Detail row={r} b={s.b} report={report} onClose={() => setOpen(null)} />
@@ -328,7 +337,7 @@ export default function MatchupApp() {
                     })}
                     {!rows.length && (
                       <tr>
-                        <td colSpan={7} className="px-3 py-6 text-center text-ink-3">
+                        <td colSpan={9} className="px-3 py-6 text-center text-ink-3">
                           No team matches "{query}".
                         </td>
                       </tr>
@@ -418,13 +427,13 @@ function Detail({ row, b, report, onClose }: { row: MatchupRow; b: SeasonBlock; 
           <thead className="bg-panel-2/70 text-[10.5px] uppercase tracking-wider text-ink-3">
             <tr>
               <th rowSpan={2} className="sticky left-0 z-10 bg-panel-2 px-3 py-1.5 text-left font-medium">Split</th>
-              <th colSpan={5} className="border-l border-line px-2 py-1.5 font-medium text-ink-2" title="His own carries only; ranks are among RBs">{rb}</th>
-              <th colSpan={5} className="border-l border-line px-2 py-1.5 font-medium text-ink-2">{dfn} defense</th>
+              <th colSpan={4} className="border-l border-line px-2 py-1.5 font-medium text-ink-2" title="His own carries only; ranks are among RBs">{rb}</th>
+              <th colSpan={4} className="border-l border-line px-2 py-1.5 font-medium text-ink-2">{dfn} defense</th>
               <th rowSpan={2} className="border-l border-line px-2 py-1.5 font-medium" title={report.edge.definition}>Edge</th>
             </tr>
             <tr className="text-right">
-              {['Att', 'Share', 'YPC', 'EPA/run', 'Success', 'Faced', 'Share', 'YPC', 'EPA al.', 'Succ. al.'].map((h, i) => (
-                <th key={i} className={`px-2 pb-1.5 font-medium ${i === 0 || i === 5 ? 'border-l border-line' : ''}`}>{h}</th>
+              {['Att', 'Share', 'Success', 'YPC', 'Faced', 'Share', 'Succ. al.', 'YPC al.'].map((h, i) => (
+                <th key={i} className={`px-2 pb-1.5 font-medium ${i === 0 || i === 4 ? 'border-l border-line' : ''}`}>{h}</th>
               ))}
             </tr>
           </thead>
@@ -435,7 +444,7 @@ function Detail({ row, b, report, onClose }: { row: MatchupRow; b: SeasonBlock; 
               return (
                 <Fragment key={grp}>
                   <tr className="border-t border-line bg-panel-2/40">
-                    <th colSpan={12} scope="rowgroup" className="sticky left-0 px-3 py-1 text-left text-[10.5px] font-semibold uppercase tracking-wider text-ink-3">
+                    <th colSpan={10} scope="rowgroup" className="sticky left-0 px-3 py-1 text-left text-[10.5px] font-semibold uppercase tracking-wider text-ink-3">
                       {label}
                     </th>
                   </tr>
@@ -474,12 +483,11 @@ function SplitCells({ m, first }: { m: Metrics; first?: boolean }) {
     <>
       <td className={`px-2 py-1.5 text-right text-ink-2 ${first ? 'border-l border-line' : ''}`}>{m.att}</td>
       <td className="px-2 py-1.5 text-right">{formatCell(m.share ?? null, 'pct')}</td>
-      <td className="px-2 py-1.5 text-right">{formatCell(m.ypc, 'dec1')}</td>
-      <td className="px-2 py-1.5 text-right">
-        <Stat v={m.epa} fmt="epa" rank={m.ranks.epa} />
-      </td>
       <td className="px-2 py-1.5 text-right">
         <Stat v={m.sr} fmt="pct" rank={m.ranks.sr} />
+      </td>
+      <td className="px-2 py-1.5 text-right">
+        <Stat v={m.ypc} fmt="dec1" rank={m.ranks.ypc} />
       </td>
     </>
   );
@@ -487,7 +495,6 @@ function SplitCells({ m, first }: { m: Metrics; first?: boolean }) {
 
 function StatStrip({ title, m, kind, pfrNote, team }: { title: string; m: SeasonBlock['overall']['off']; kind: 'offense' | 'defense'; pfrNote: string | null; team: string }) {
   const items: [string, number | null, Parameters<typeof formatCell>[1], Rank | undefined][] = [
-    ['EPA/run', m.epa, 'epa', m.ranks.epa],
     ['Success', m.sr, 'pct', m.ranks.sr],
     ['YPC', m.ypc, 'dec1', m.ranks.ypc],
     ['Explosive', m.expl, 'pct', m.ranks.expl],
@@ -530,8 +537,8 @@ function Backs({ b, team, current }: { b: SeasonBlock; team: string; current: bo
   const rows = b.rushers.filter((r) => current || r.att > 0);
   if (!rows.length) return null;
   const cols: [string, string][] = current
-    ? [['Role', ''], ['Att', ''], ['Carry %', 'Share of the team’s designed runs'], ['Snap %', 'Share of offensive snaps'], ['YPC', ''], ['EPA/run', ''], ['YBC', 'Yards before contact per carry (PFR)'], ['YAC', 'Yards after contact per carry (PFR)']]
-    : [['Team', ''], ['Att', ''], ['YPC', ''], ['EPA/run', ''], ['Success', ''], ['YBC', 'Yards before contact per carry (PFR)'], ['YAC', 'Yards after contact per carry (PFR)']];
+    ? [['Role', ''], ['Att', ''], ['Carry %', 'Share of the team’s designed runs'], ['Snap %', 'Share of offensive snaps'], ['Success', ''], ['YPC', ''], ['YBC', 'Yards before contact per carry (PFR)'], ['YAC', 'Yards after contact per carry (PFR)']]
+    : [['Team', ''], ['Att', ''], ['Success', ''], ['YPC', ''], ['YBC', 'Yards before contact per carry (PFR)'], ['YAC', 'Yards after contact per carry (PFR)']];
   return (
     <div className="mt-3">
       <h3 className="text-[11px] font-semibold uppercase tracking-wider text-ink-3">
@@ -558,9 +565,8 @@ function Backs({ b, team, current }: { b: SeasonBlock; team: string; current: bo
                 <td className="px-2 py-1.5 text-right">{r.att}</td>
                 {current && <td className="px-2 py-1.5 text-right">{formatCell(r.carry_share ?? null, 'pct')}</td>}
                 {current && <td className="px-2 py-1.5 text-right">{formatCell(r.snap_share ?? null, 'pct')}</td>}
-                <td className="px-2 py-1.5 text-right">{formatCell(r.ypc, 'dec1')}</td>
-                <td className="px-2 py-1.5 text-right"><Stat v={r.epa} fmt="epa" rank={r.ranks.epa} /></td>
-                {!current && <td className="px-2 py-1.5 text-right">{formatCell(r.sr, 'pct')}</td>}
+                <td className="px-2 py-1.5 text-right"><Stat v={r.sr} fmt="pct" rank={r.ranks.sr} /></td>
+                <td className="px-2 py-1.5 text-right"><Stat v={r.ypc} fmt="dec1" rank={r.ranks.ypc} /></td>
                 <td className="px-2 py-1.5 text-right">{formatCell(r.ybc_att, 'dec1')}</td>
                 <td className="px-2 py-1.5 text-right">{formatCell(r.yac_att, 'dec1')}</td>
               </tr>

@@ -17,7 +17,7 @@ FILTERS = [
     "Two-point tries removed (two_point_attempt = 1).",
     "Plays wiped out by penalty removed (play_type = no_play), plus plays nflverse marks deleted.",
     "Designed QB runs are kept and labeled (rusher's roster position = QB); QB sneaks come from FTN (is_qb_sneak).",
-    f"Explosive run = {EXPLOSIVE_YARDS}+ rushing yards. Stuff = 0 or fewer rushing yards. Success = EPA > 0 (nflverse success).",
+    f"Explosive run = {EXPLOSIVE_YARDS}+ rushing yards. Stuff = 0 or fewer rushing yards. Success = nflverse success flag (the run improved the offense's expected scoring, given down, distance and field position).",
     "Left / middle / right and end / tackle / guard are nflverse run_location / run_gap, from the OFFENSE's point of view.",
 ]
 

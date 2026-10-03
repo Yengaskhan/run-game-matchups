@@ -65,15 +65,15 @@ def main(game_id: str) -> int:
         n = len(values)
         return r, n, (1.0 if n == 1 else 1 - (r - 1) / (n - 1))
 
-    def rb_rank(pid, team, loc=None, per_game=6.25):
+    def rb_rank(pid, team, loc=None, per_game=6.25, metric="success"):
         df = nonqb if loc is None else nonqb[nonqb.run_location == loc]
-        gg = df.groupby(["rusher_player_id", "posteam"]).epa.agg(["mean", "size"]).reset_index()
+        gg = df.groupby(["rusher_player_id", "posteam"])[metric].agg(["mean", "size"]).reset_index()
         gg = gg[gg["size"] >= gg.posteam.map(lambda t: math.ceil(per_game * games_played[t] - 1e-9))]
         gg = gg.set_index(["rusher_player_id", "posteam"])["mean"]
         return pct(gg, (pid, team), True) if (pid, team) in gg.index else None
 
-    def def_rank(team, loc):
-        dd = runs[runs.run_location == loc].groupby("defteam").epa.agg(["mean", "size"])
+    def def_rank(team, loc, metric="success"):
+        dd = runs[runs.run_location == loc].groupby("defteam")[metric].agg(["mean", "size"])
         dd = dd[[dd.loc[t, "size"] >= math.ceil(3.0 * games_played[t] - 1e-9) for t in dd.index]]["mean"]
         return pct(dd, team, False) if team in dd.index else None
 
@@ -94,9 +94,10 @@ def main(game_id: str) -> int:
         for k, v in summarize(mine).items():
             check(f"{name} {k}", v, b["overall"]["off"][k])
         check(f"{name} carry share", len(mine) / len(runs[runs.posteam == off]), b["overall"]["off"]["carry_share"])
-        rk = rb_rank(pid, off)
-        check(f"{name} EPA rank among RBs", rk[0] if rk else None, b["overall"]["off"]["ranks"].get("epa", [None])[0], 0)
-        check(f"{name} RB peer group", rk[1] if rk else None, b["overall"]["off"]["ranks"].get("epa", [None, None])[1], 0)
+        for metric, key in (("success", "sr"), ("yards", "ypc")):
+            rk = rb_rank(pid, off, metric=metric)
+            check(f"{name} {key} rank among RBs", rk[0] if rk else None, b["overall"]["off"]["ranks"].get(key, [None])[0], 0)
+            check(f"{name} {key} RB peer group", rk[1] if rk else None, b["overall"]["off"]["ranks"].get(key, [None, None])[1], 0)
         pp = pfr[(pfr.gsis_id == pid) & (pfr.team == off)]
         check(f"{name} YBC/att (PFR)", pp.rushing_yards_before_contact.sum() / pp.carries.sum() if len(pp) else None, b["overall"]["off"]["ybc_att"])
         check(f"{name} YAC/att (PFR)", pp.rushing_yards_after_contact.sum() / pp.carries.sum() if len(pp) else None, b["overall"]["off"]["yac_att"])
@@ -111,8 +112,9 @@ def main(game_id: str) -> int:
         d = summarize(runs[runs.defteam == dfn])
         for k, v in d.items():
             check(f"{dfn} defense {k} allowed", v, b["overall"]["def"][k])
-        def_epa = runs.groupby("defteam").epa.mean().sort_values()
-        check(f"{dfn} defense EPA rank", list(def_epa.index).index(dfn) + 1, b["overall"]["def"]["ranks"]["epa"][0], 0)
+        for metric, key in (("success", "sr"), ("yards", "ypc")):
+            means = runs.groupby("defteam")[metric].mean()
+            check(f"{dfn} defense {key} rank", int((means < means[dfn]).sum() + 1), b["overall"]["def"]["ranks"][key][0], 0)
         p = pfr[(pfr.opponent == dfn) & ~pfr.is_qb]
         check(f"{dfn} YBC/att allowed (PFR, non-QB)", p.rushing_yards_before_contact.sum() / p.carries.sum(), b["overall"]["def"]["ybc_att"])
 
@@ -126,10 +128,14 @@ def main(game_id: str) -> int:
             sp = splits[("direction", loc)]
             sub = mine_dir[mine_dir.run_location == loc]
             check(f"{name} {loc} share", rb_shares.get(loc, 0.0), sp["off"]["share"])
-            check(f"{name} {loc} EPA", sub.epa.mean() if len(sub) else None, sp["off"]["epa"])
+            check(f"{name} {loc} success", sub.success.mean() if len(sub) else None, sp["off"]["sr"])
+            check(f"{name} {loc} YPC", sub.yards.mean() if len(sub) else None, sp["off"]["ypc"])
             check(f"{dfn} defense {loc} share", def_shares.get(loc, 0.0), sp["def"]["share"])
-            o_r, d_r = rb_rank(pid, off, loc, per_game=2.0), def_rank(dfn, loc)
-            edges[loc] = None if o_r is None or d_r is None else round(50 + 50 * (o_r[2] - d_r[2]))
+            # Edge: average of the success-rate and YPC percentiles on each side.
+            o_r = [rb_rank(pid, off, loc, per_game=2.0, metric=m) for m in ("success", "yards")]
+            d_r = [def_rank(dfn, loc, metric=m) for m in ("success", "yards")]
+            ok = all(o_r) and all(d_r)
+            edges[loc] = round(50 + 50 * (sum(x[2] for x in o_r) / 2 - sum(x[2] for x in d_r) / 2)) if ok else None
             check(f"{name} vs {dfn} {loc} edge", edges[loc], sp["edge"], 0)
         cov = sum(rb_shares.get(x, 0.0) for x in edges if edges[x] is not None)
         run_edge = round(sum(edges[x] * rb_shares.get(x, 0.0) for x in edges if edges[x] is not None) / cov) if cov else None
@@ -143,7 +149,7 @@ def main(game_id: str) -> int:
         pb = row["seasons"][str(prior)]
         pr = pruns[pruns.rusher_player_id == pid]
         check(f"{name} {prior} designed runs", len(pr), pb["overall"]["off"]["att"], 0)
-        check(f"{name} {prior} EPA/run", pr.epa.mean() if len(pr) else None, pb["overall"]["off"]["epa"])
+        check(f"{name} {prior} success", pr.success.mean() if len(pr) else None, pb["overall"]["off"]["sr"])
         check(f"{name} {prior} block labeled {prior}", prior, pb["season"], 0)
 
     width = max(len(r[1]) for r in results)

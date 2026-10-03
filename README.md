@@ -141,16 +141,16 @@ Every row still shows its numbers; a row that misses the qualifier just shows ra
 
 A 0–100 score, 50 = even, shaded green (RB edge) to orange (defense edge).
 
-- **Per bucket** (a direction, gap or box count): `50 + 50 × (RB EPA/run percentile among RBs − defense EPA-allowed percentile among defenses)`. Each percentile comes from its own ranked table, so a top RB meeting the leakiest defense in that bucket scores 100. It's blank when either side is below the rank qualifier.
+- **Per bucket** (a direction, gap or box count): `50 + 50 × (RB percentile among RBs − defense percentile among defenses)`. Each side's percentile is the average of its **success rate** and **yards per carry** percentiles (`EDGE["metrics"]` in config), each from its own ranked table, so a top RB on both meeting the leakiest defense on both scores 100. It's blank when either side is below the rank qualifier.
 - **Headline Run Edge:** the left / middle / right edges, averaged with weights from how often the RB runs each way. When the ranked directions cover less than half of the RB's runs, the badge shows grey with a dashed border ("small sample").
 - The **Split** selector (Left / Middle / Right) swaps the table to that one direction's numbers and edge.
 
 ## Report layout
 
 - **Header:** week, **Season** selector (current season to date, or the full prior season; never combined), **Split** selector, **Find team** box, and the colour legend.
-- **Main table:** one row per offense playing that week, led by its starting RB (RB1 on the nflverse depth chart, with his carries and share of the team's designed runs), then opponent, the RB's EPA/run (ranked among RBs) and the defense's EPA allowed (ranked among defenses), each with attempts, his main run direction, and Run Edge. Every column sorts.
+- **Main table:** one row per offense playing that week, led by its starting RB (RB1 on the nflverse depth chart, with his carries and share of the team's designed runs), then opponent, the RB's success rate and YPC (ranked among RBs) and the defense's success rate and YPC allowed (ranked among defenses), with attempts, his main run direction, and Run Edge. Every column sorts.
 - **View** opens the detail under the row:
-  - one-line stat strips for the offense and the defense (EPA, success, YPC, explosive, stuffed, YBC, YAC, with ranks)
+  - one-line stat strips for the RB and the defense (success, YPC, explosive, stuffed, YBC, YAC, with ranks)
   - one table of direction / gap / box splits: offense | defense | edge
   - up to two takeaways (best and toughest gap for the offense)
   - the backs: depth-chart order, carry and snap share, efficiency, YBC vs YAC

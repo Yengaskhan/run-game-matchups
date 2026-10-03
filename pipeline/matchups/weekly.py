@@ -37,11 +37,13 @@ def metrics(rec: dict | None, keys=("att", "share", "ypc", "epa", "sr", "expl", 
 
 
 def edge_from(off: dict, dfn: dict) -> int | None:
-    """50 + 50 x (offense EPA percentile - defense EPA-allowed percentile); None unless both are ranked."""
-    po = pct_from_rank(*off["ranks"]["epa"]) if "epa" in off["ranks"] else None
-    pd_ = pct_from_rank(*dfn["ranks"]["epa"]) if "epa" in dfn["ranks"] else None
-    if po is None or pd_ is None:
+    """50 + 50 x (RB percentile - defense percentile), each side's percentile being the average over
+    EDGE["metrics"] (success rate and YPC). None unless both sides are ranked on every metric."""
+    ms = EDGE["metrics"]
+    if not all(m in off["ranks"] and m in dfn["ranks"] for m in ms):
         return None
+    po = sum(pct_from_rank(*off["ranks"][m]) for m in ms) / len(ms)
+    pd_ = sum(pct_from_rank(*dfn["ranks"][m]) for m in ms) / len(ms)
     return round(50 + 50 * (po - pd_))
 
 
@@ -166,14 +168,14 @@ def takeaways(name: str, dfn: str, splits: list[dict], att: int, w: LeagueWindow
 
     def line(s, who):
         o, d = s["off"], s["def"]
-        return (f"{who}: {s['label']} (edge {s['edge']}). {name} runs there {fmt.pct(o['share'])} of the time, "
-                f"{fmt.epa(o['epa'])} EPA/run ({fmt.rank(*o['ranks']['epa'])} RBs, n={o['att']}); "
-                f"{dfn} allows {fmt.epa(d['epa'])} ({fmt.rank(*d['ranks']['epa'])}, n={d['att']}).")
+        return (f"{who}: {s['label']} (edge {s['edge']}). {name} runs there {fmt.pct(o['share'])} of the time: "
+                f"{fmt.pct(o['sr'])} success ({fmt.rank(*o['ranks']['sr'])} RBs), {fmt.dec(o['ypc'])} YPC ({fmt.rank(*o['ranks']['ypc'])}), n={o['att']}. "
+                f"{dfn} allows {fmt.pct(d['sr'])} success ({fmt.rank(*d['ranks']['sr'])}), {fmt.dec(d['ypc'])} YPC ({fmt.rank(*d['ranks']['ypc'])}), n={d['att']}.")
 
     hi, lo = max(used, key=lambda s: s["edge"]), min(used, key=lambda s: s["edge"])
-    out = [line(hi, f"Best spot for {name}")]
+    out = [line(hi, "Best spot" if hi["edge"] >= 50 else "Least unfavorable of his main gaps")]
     if lo is not hi:
-        out.append(line(lo, f"Toughest spot for {name}"))
+        out.append(line(lo, "Toughest spot" if lo["edge"] < 50 else "Least favorable of his main gaps"))
     return out
 
 
@@ -216,8 +218,8 @@ def week_report(season: int, week: int, games: list[dict], cur: LeagueWindow, pr
             "bands": bands,
             "min_coverage": EDGE["min_coverage"],
             "definition": ("Run Edge (0–100, 50 = neutral), starting RB vs run defense. In each direction, gap or box count: "
-                           "50 + 50 × (the RB's EPA/run percentile among RBs − the defense's EPA-allowed percentile among defenses), each "
-                           "within its own ranked table. The headline edge averages the left / middle / right edges, weighted by how often the "
+                           "50 + 50 × (the RB's percentile among RBs − the defense's percentile among defenses), where each side's percentile "
+                           "is the average of its success-rate and yards-per-carry percentiles, each within its own ranked table. The headline edge averages the left / middle / right edges, weighted by how often the "
                            f"RB runs each way. It is shaded only when the ranked directions cover at least {fmt.pct(EDGE['min_coverage'])} of his runs; "
                            "otherwise it shows grey as a small sample."),
         },
@@ -230,7 +232,7 @@ def week_report(season: int, week: int, games: list[dict], cur: LeagueWindow, pr
             "YBC / YAC: Pro Football Reference via nflverse, per player per game, so they include every carry; defense “allowed” figures use non-QB rushers only."
             + (f" PFR hasn't published every {cur.season} game yet, so YBC / YAC cover {fmt.weeks_label(cur.pfr_weeks)} (everything else: {fmt.weeks_label(cur.weeks)})."
                if cur.weeks and cur.pfr_weeks != cur.weeks else ""),
-            f"Explosive = {EXPLOSIVE_YARDS}+ yards. Stuff = 0 or fewer. Success = EPA > 0. Rank 1 = best: the most productive RB, or the stingiest defense.",
+            f"Explosive = {EXPLOSIVE_YARDS}+ yards. Stuff = 0 or fewer. Success rate = share of runs nflverse marks successful: the run left the offense better placed to score than before it, given down, distance and field position. Rank 1 = best: the most productive RB, or the stingiest defense.",
         ],
         "filters": FILTERS,
         "qualifiers": [
