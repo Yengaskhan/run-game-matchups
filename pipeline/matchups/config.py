@@ -36,12 +36,15 @@ QUALIFIERS = {
 }
 
 # Run Edge (0-100, 50 = neutral). In one bucket (a direction, gap or box count):
-#   edge = 50 + 50 x (offense EPA/run percentile - defense EPA-allowed percentile)
-# where each percentile is within its own ranked table (1 = best offense / stingiest defense).
-# The headline Run Edge averages the left / middle / right edges, weighted by how often the offense
-# runs each way. It is only shaded when the ranked directions cover at least `min_coverage` of the
-# offense's runs; below that it shows grey as "small sample".
+#   edge = 50 + 50 x (RB percentile - defense percentile)
+# where each side's percentile is the average of its success-rate and yards-per-carry percentiles
+# (EDGE["metrics"]), each within its own ranked table (1 = best RB / stingiest defense).
+# The headline Run Edge averages the left / middle / right edges, weighted by how often the RB
+# runs each way. It is only shaded when the ranked directions cover at least `min_coverage` of
+# his runs; below that it shows grey as "small sample".
 EDGE = {
+    # Metrics behind the edge, averaged as percentiles: success rate and yards per carry.
+    "metrics": ["sr", "ypc"],
     "min_coverage": 0.5,
     # Colour bands, lower bound inclusive.
     "bands": [

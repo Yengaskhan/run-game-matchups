@@ -116,11 +116,15 @@ def test_check_report_catches_bad_shares_and_totals():
 def test_edge_formula_and_bands():
     from matchups.weekly import band, edge_from
 
-    best, worst, mid = {"ranks": {"epa": [1, 32]}}, {"ranks": {"epa": [32, 32]}}, {"ranks": {"epa": [16, 31]}}
-    assert edge_from(best, worst) == 100  # best offense vs the leakiest defense
+    r = lambda sr, ypc: {"ranks": {"sr": sr, "ypc": ypc}}  # noqa: E731
+    best, worst, mid = r([1, 32], [1, 32]), r([32, 32], [32, 32]), r([16, 31], [16, 31])
+    assert edge_from(best, worst) == 100  # best RB vs the leakiest defense, on both success rate and YPC
     assert edge_from(worst, best) == 0
     assert edge_from(mid, mid) == 50
-    assert edge_from(best, {"ranks": {}}) is None  # an unranked side gives no edge
+    # Success-rate and YPC percentiles are averaged: 1st and 32nd of 32 is the middle.
+    assert edge_from(r([1, 32], [32, 32]), mid) == 50
+    assert edge_from(best, {"ranks": {"sr": [1, 32]}}) is None  # a side missing a metric's rank gives no edge
+    assert edge_from({"ranks": {"epa": [1, 32]}}, worst) is None  # EPA plays no part
     assert [band(x) for x in (70, 69, 58, 57, 43, 42, 31, 30)] == [
         "big_edge", "small_edge", "small_edge", "neutral", "neutral", "small_disadvantage", "small_disadvantage", "big_disadvantage"]
     assert band(90, small_sample=True) == "neutral" and band(None) == "neutral"
