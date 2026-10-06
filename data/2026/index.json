@@ -17,6 +17,14 @@
    "last_gameday": "2026-10-05",
    "path": "data/2026/week-04.json",
    "data_as_of": "2026-09-28"
+  },
+  {
+   "week": 5,
+   "games": 15,
+   "first_gameday": "2026-10-08",
+   "last_gameday": "2026-10-12",
+   "path": "data/2026/week-05.json",
+   "data_as_of": "2026-10-05"
   }
  ]
 }
