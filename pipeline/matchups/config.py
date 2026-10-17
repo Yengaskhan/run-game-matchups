@@ -12,7 +12,7 @@ APP_ROOT = Path(__file__).resolve().parents[2]
 OUTPUT_DIR = APP_ROOT / "data"
 
 # Bump when the JSON layout changes in a way the page must know about.
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 # Only regular-season games feed either season's numbers. Playoff games are excluded.
 SEASON_TYPE = "REG"

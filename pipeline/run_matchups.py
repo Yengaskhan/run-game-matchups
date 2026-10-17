@@ -22,6 +22,7 @@ from matchups import load  # noqa: E402
 from matchups.fmt import weeks_label  # noqa: E402
 from matchups.config import OUTPUT_DIR, SCHEMA_VERSION, SEASON_TYPE  # noqa: E402
 from matchups.validate import ValidationError, check_pbp_complete, check_report, pfr_complete_weeks, reconcile_pfr, reconcile_removed, reconcile_team_totals  # noqa: E402
+from matchups.datasuite import DataSuiteError, extra_note, pick_rushing_export  # noqa: E402
 from matchups.logos import ensure_logos  # noqa: E402
 from matchups.weekly import week_report  # noqa: E402
 from matchups.window import build_window, completed_weeks_before  # noqa: E402
@@ -117,8 +118,16 @@ def main() -> int:
         out_dir.mkdir(parents=True, exist_ok=True)
         game_rows = list(games.iter_rows(named=True))
         depth = {g["game_id"]: rb_depth(season, g["gameday"], g["result"] is not None) for g in game_rows}
+        window_games = set(sched.filter(pl.col("week").is_in(weeks), pl.col("result").is_not_null())["game_id"].to_list())
+        try:
+            pick = pick_rushing_export(sched, window_games, week) if weeks else {"status": "No games played yet this season."}
+        except DataSuiteError as e:
+            raise ValidationError(f"Data Suite export: {e}") from e
+        if "file" in pick:
+            print(f"  week {week}: Data Suite rushing export {pick['file'].name}" + (f" (+{len(pick['extra'])} later game(s))" if pick["extra"] else ""))
         rep = week_report(season, week, game_rows, cur, prior, depth,
-                          checks + ["Report: direction / gap / box shares sum to 100% for every offense and defense; rusher rows sum to the team total."])
+                          checks + ["Report: direction / gap / box shares sum to 100% for every offense and defense; rusher rows sum to the team total."],
+                          scheme_pick=pick, scheme_note=extra_note(pick, sched))
         check_report(rep)
         path = out_dir / f"week-{week:02d}.json"
         # Keep the existing file when nothing but the timestamp would change, so a scheduled run with

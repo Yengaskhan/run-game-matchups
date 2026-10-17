@@ -1,4 +1,4 @@
-export type CellFormat = 'int' | 'dec1' | 'epa' | 'pct' | 'text';
+export type CellFormat = 'int' | 'dec1' | 'pct' | 'text';
 
 export function formatCell(v: number | string | null | undefined, fmt: CellFormat): string {
   if (v == null || v === '') return '—';
@@ -8,8 +8,6 @@ export function formatCell(v: number | string | null | undefined, fmt: CellForma
       return Math.round(v).toLocaleString();
     case 'dec1':
       return v.toFixed(1);
-    case 'epa':
-      return `${v > 0 ? '+' : v < 0 ? '−' : ''}${Math.abs(v).toFixed(2)}`;
     case 'pct':
       return `${(v * 100).toFixed(0)}%`;
     default:

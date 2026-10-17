@@ -40,7 +40,7 @@ def main(game_id: str) -> int:
     runs["qb"] = runs.rusher_player_id.map(pos).eq("QB")
 
     def summarize(df):
-        return {"att": len(df), "ypc": df.yards.mean(), "epa": df.epa.mean(), "sr": df.success.mean(), "expl": (df.yards >= 10).mean(), "stuff": (df.yards <= 0).mean()}
+        return {"att": len(df), "ypc": df.yards.mean(), "sr": df.success.mean(), "expl": (df.yards >= 10).mean(), "stuff": (df.yards <= 0).mean()}
 
     results = []
 
@@ -118,7 +118,7 @@ def main(game_id: str) -> int:
         p = pfr[(pfr.opponent == dfn) & ~pfr.is_qb]
         check(f"{dfn} YBC/att allowed (PFR, non-QB)", p.rushing_yards_before_contact.sum() / p.carries.sum(), b["overall"]["def"]["ybc_att"])
 
-        # Direction shares / EPA (offense perspective), then the Run Edge from independent ranks.
+        # Direction shares (offense perspective), then the Run Edge from independent ranks.
         mine_dir = mine[mine.run_location.notna()]
         rb_shares = mine_dir.run_location.value_counts(normalize=True)
         dd = runs[(runs.defteam == dfn) & runs.run_location.notna()]
@@ -140,6 +140,13 @@ def main(game_id: str) -> int:
         cov = sum(rb_shares.get(x, 0.0) for x in edges if edges[x] is not None)
         run_edge = round(sum(edges[x] * rb_shares.get(x, 0.0) for x in edges if edges[x] is not None) / cov) if cov else None
         check(f"{name} vs {dfn} Run Edge", run_edge, b["run_edge"], 0)
+
+        # The player / defense pool (player and defense pages) carries the same numbers as the row.
+        pool = rep["pool"][str(season)]
+        check(f"{name} pool overall = row", 1, int(pool["players"][pid]["overall"] == b["overall"]["off"]), 0)
+        check(f"{dfn} pool overall = row", 1, int(pool["defenses"][dfn]["overall"] == b["overall"]["def"]), 0)
+        for loc in ["left", "middle", "right"]:
+            check(f"{name} pool {loc} split = row", 1, int(pool["players"][pid]["splits"]["direction"][loc] == splits[("direction", loc)]["off"]), 0)
 
         # Backs table still adds up to the team's designed runs.
         total = next(r for r in b["rushers"] if r["kind"] == "total")

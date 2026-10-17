@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 import polars as pl
 
 from . import fmt
+from .datasuite import DEF_STATUS, qualifier_note, scheme_block, scheme_player
 from .config import BOX_BUCKETS, DIRECTIONS, EDGE, EXPLOSIVE_YARDS, GAPS, QUALIFIERS, SCHEMA_VERSION
 from .metrics import agg_exprs, nan_to_none, pct_from_rank
 from .plays import FILTERS
@@ -19,7 +20,10 @@ GROUPS = [
     ("gap", GAPS),
     ("box", [(k, label) for k, label, *_ in BOX_BUCKETS]),
 ]
-RANKED = ["ypc", "epa", "sr", "expl", "stuff", "ybc_att", "yac_att"]
+RANKED = ["ypc", "sr", "expl", "stuff", "ybc_att", "yac_att"]
+SPLIT_KEYS = ("att", "share", "ypc", "sr")
+OFF_KEYS = ("games", "att", "ypc", "sr", "expl", "stuff", "ybc_att", "yac_att", "pfr_att", "carry_share", "snap_share")
+DEF_KEYS = ("games", "att", "ypc", "sr", "expl", "stuff", "ybc_att", "yac_att", "pfr_att", "qb_att")
 
 
 def _round(v):
@@ -27,12 +31,12 @@ def _round(v):
     return round(v, 4) if isinstance(v, float) else v
 
 
-def metrics(rec: dict | None, keys=("att", "share", "ypc", "epa", "sr", "expl", "stuff")) -> dict:
-    """Numbers plus [rank, peer group size] for every ranked metric that qualified."""
+def metrics(rec: dict | None, keys=SPLIT_KEYS) -> dict:
+    """Numbers plus [rank, peer group size] for every ranked metric in `keys` that qualified."""
     rec = rec or {}
     m = {k: _round(rec.get(k)) for k in keys}
     m["att"] = int(rec.get("att") or 0)
-    m["ranks"] = {k: [int(rec[f"{k}_rank"]), int(rec[f"{k}_n"])] for k in RANKED if rec.get(f"{k}_rank") is not None and rec.get(f"{k}_n")}
+    m["ranks"] = {k: [int(rec[f"{k}_rank"]), int(rec[f"{k}_n"])] for k in RANKED if k in keys and rec.get(f"{k}_rank") is not None and rec.get(f"{k}_n")}
     return m
 
 
@@ -64,31 +68,54 @@ def _player_rows(w: LeagueWindow, table: str, pid: str, team: str) -> list[dict]
     return w.rows(table, **match)
 
 
+def player_stats(w: LeagueWindow, pid: str, team: str | None) -> dict | None:
+    """One rusher's own designed runs in a window: overall and direction / gap / box splits, ranked among
+    non-QB rushers. Current season: for `team` only; prior season: his full line, any team. None if no runs."""
+    rec = (_player_rows(w, "rushers", pid, team) or [None])[0] if w.weeks and "rushers" in w.tables else None
+    if not rec:
+        return None
+    rec = {**rec, "games": rec.get("games_played") or rec.get("games_with_carry")}
+    splits = {}
+    for group, _buckets in GROUPS:
+        if f"rb_{group}" in w.tables:
+            splits[group] = {r["bucket"]: metrics(r) for r in _player_rows(w, f"rb_{group}", pid, team)}
+    return {"team": team if w.is_current else rec.get("teams"), "overall": metrics(rec, OFF_KEYS), "splits": splits}
+
+
+def defense_stats(w: LeagueWindow, team: str) -> dict | None:
+    """A run defense in a window: overall allowed and direction / gap / box splits, ranked among defenses."""
+    if not w.weeks or "def" not in w.tables:
+        return None
+    splits = {}
+    for group, _buckets in GROUPS:
+        if f"def_{group}" in w.tables:
+            splits[group] = {r["bucket"]: metrics(r) for r in w.rows(f"def_{group}", team=team)}
+    return {"team": team, "overall": metrics(w.row("def", team=team), DEF_KEYS), "splits": splits}
+
+
 def side_block(w: LeagueWindow, off: str, dfn: str, depth: list[dict], starter: dict | None,
                players_prior: list[dict] | None = None) -> dict | None:
-    """Everything the page shows for one starting RB vs one defense in one season window.
+    """Everything the slate shows for one starting RB vs one defense in one season window.
 
     The offense side is the starting RB's OWN designed runs (current season: for this team; prior season:
     his full line, any team), ranked among non-QB rushers. The defense side is the defense against every
-    rusher. QB runs, backups and the rest of the team are left out of the RB's numbers."""
+    rusher. QB runs, backups and the rest of the team are left out of the RB's numbers. The same numbers
+    are in the report's player / defense pool (player_stats / defense_stats), which the page uses to
+    score any RB against any defense."""
     if not w.weeks or "off" not in w.tables:
         return None
-    d_all = w.row("def", team=dfn)
     pid = starter["id"] if starter else None
-    rec = (_player_rows(w, "rushers", pid, off) or [None])[0] if pid else None
-    if rec:
-        rec = {**rec, "games": rec.get("games_played") or rec.get("games_with_carry")}
-    o_over = metrics(rec, ("games", "att", "ypc", "epa", "sr", "expl", "stuff", "ybc_att", "yac_att", "pfr_att", "carry_share", "snap_share"))
-    d_over = metrics(d_all, ("games", "att", "ypc", "epa", "sr", "expl", "stuff", "ybc_att", "yac_att", "pfr_att", "qb_att"))
+    ps = player_stats(w, pid, off if w.is_current else None) if pid else None
+    ds = defense_stats(w, dfn)
+    o_over = ps["overall"] if ps else metrics(None, OFF_KEYS)
 
     splits = []
     for group, buckets in GROUPS:
-        if f"def_{group}" not in w.tables:
+        if group not in ds["splits"]:
             continue
-        orecs = {r["bucket"]: r for r in _player_rows(w, f"rb_{group}", pid, off)} if pid else {}
-        drecs = {r["bucket"]: r for r in w.rows(f"def_{group}", team=dfn)}
         for key, label in buckets:
-            o, d = metrics(orecs.get(key)), metrics(drecs.get(key))
+            o = (ps["splits"].get(group, {}).get(key) if ps else None) or metrics(None)
+            d = ds["splits"][group].get(key) or metrics(None)
             splits.append({"group": group, "key": key, "label": label, "off": o, "def": d, "edge": edge_from(o, d)})
 
     # Headline Run Edge: direction edges weighted by where the RB runs.
@@ -103,8 +130,8 @@ def side_block(w: LeagueWindow, off: str, dfn: str, depth: list[dict], starter: 
     return {
         "season": w.season,
         "weeks": w.weeks,
-        "subject": {"kind": "rb", "id": pid, "name": name, "team": off, "teams": (rec or {}).get("teams")},
-        "overall": {"off": o_over, "def": d_over},
+        "subject": {"kind": "rb", "id": pid, "name": name, "team": off, "teams": ps["team"] if ps and not w.is_current else None},
+        "overall": {"off": o_over, "def": ds["overall"]},
         "run_edge": run_edge,
         "edge_coverage": _round(coverage),
         "small_sample": small,
@@ -116,10 +143,48 @@ def side_block(w: LeagueWindow, off: str, dfn: str, depth: list[dict], starter: 
     }
 
 
+def roster(w: LeagueWindow, depth_by_game: dict[str, dict[str, list[dict]]]) -> list[dict]:
+    """Every RB the player page can show: depth-chart RBs of this week's teams (in depth order), then
+    other RBs / FBs with current-season designed runs, on the team they have the most carries for."""
+    out, seen = [], set()
+    for depth in depth_by_game.values():
+        for team in sorted(depth):
+            for d in depth[team]:
+                if d["gsis_id"] not in seen:
+                    seen.add(d["gsis_id"])
+                    out.append({"id": d["gsis_id"], "name": d["name"], "team": team, "pos": "RB", "depth": f"RB{d['pos_rank']}"})
+    if w.weeks and "rushers" in w.tables:
+        rs = w.tables["rushers"].filter(~pl.col("is_qb"), pl.col("pos").is_in(["RB", "FB"]), pl.col("att") > 0)
+        for r in rs.sort(["att", "rusher_player_id"], descending=[True, False]).iter_rows(named=True):
+            if r["rusher_player_id"] not in seen:
+                seen.add(r["rusher_player_id"])
+                out.append({"id": r["rusher_player_id"], "name": r["name"], "team": r["posteam"], "pos": r["pos"], "depth": None})
+    return out
+
+
+def pool_block(w: LeagueWindow, players: list[dict], scheme_pick: dict | None = None) -> dict | None:
+    """Every listed RB and every defense in one season window, so the page can pair any RB with any
+    defense (the Run Edge is recomputed in the browser exactly as edge_from / side_block do here)."""
+    if not w.weeks or "off" not in w.tables:
+        return None
+    ps = {}
+    for p in players:
+        st = player_stats(w, p["id"], p["team"] if w.is_current else None)
+        if st:
+            if w.is_current and scheme_pick is not None:
+                st["scheme"] = scheme_player(scheme_pick, p["id"])
+            ps[p["id"]] = st
+    league = {"overall": {k: _round(w.league["overall"].get(k)) for k in ("sr", "ypc")}}
+    for group, _buckets in GROUPS:
+        if group in w.league:
+            league[group] = {b: {k: _round(v.get(k)) for k in ("share", "sr", "ypc")} for b, v in w.league[group].items()}
+    return {"players": ps, "defenses": {t: defense_stats(w, t) for t in sorted(w.tables["def"]["team"].to_list())}, "league": league}
+
+
 def rushers_block(w: LeagueWindow, team: str, depth: list[dict]) -> list[dict]:
     """Depth-chart RBs in order, other non-QB rushers, designed QB runs, team total (rows sum to the total)."""
     recs = {r["rusher_player_id"]: r for r in w.rows("rushers", posteam=team)}
-    keys = ("att", "carry_share", "snap_share", "ypc", "epa", "sr", "ybc_att", "yac_att", "pfr_att")
+    keys = ("att", "carry_share", "snap_share", "ypc", "sr", "ybc_att", "yac_att", "pfr_att")
     out = []
     for d in depth:
         m = metrics(recs.get(d["gsis_id"]), keys)
@@ -150,7 +215,7 @@ def rushers_block(w: LeagueWindow, team: str, depth: list[dict]) -> list[dict]:
 def prior_rushers_block(w: LeagueWindow, players: list[dict]) -> list[dict]:
     """This season's backs, with their full prior-season line (whichever team they played for)."""
     recs = {r["rusher_player_id"]: r for r in w.rows("rushers")}
-    keys = ("att", "ypc", "epa", "sr", "ybc_att", "yac_att", "pfr_att")
+    keys = ("att", "ypc", "sr", "ybc_att", "yac_att", "pfr_att")
     out = []
     for p in players:
         r = recs.get(p["id"])
@@ -182,7 +247,10 @@ def takeaways(name: str, dfn: str, splits: list[dict], att: int, w: LeagueWindow
 # ------------------------------------------------------------------------------------------------
 
 def week_report(season: int, week: int, games: list[dict], cur: LeagueWindow, prior: LeagueWindow,
-                depth_by_game: dict[str, dict[str, list[dict]]], checks: list[str]) -> dict:
+                depth_by_game: dict[str, dict[str, list[dict]]], checks: list[str],
+                scheme_pick: dict | None = None, scheme_note: str | None = None) -> dict:
+    """scheme_pick: the Data Suite rushing export chosen for this week (see datasuite.pick_rushing_export)."""
+    scheme_pick = scheme_pick or {"status": "No Data Suite rushing export has been added yet."}
     rows = []
     for g in games:
         depth = depth_by_game[g["game_id"]]
@@ -190,6 +258,9 @@ def week_report(season: int, week: int, games: list[dict], cur: LeagueWindow, pr
             dep = depth.get(off, [])
             starter = {"id": dep[0]["gsis_id"], "name": dep[0]["name"]} if dep else None
             cur_block = side_block(cur, off, dfn, dep, starter)
+            if cur_block:
+                # Run scheme (zone vs man/gap): Data Suite, current season only, kept apart from nflverse numbers.
+                cur_block["scheme"] = scheme_block(scheme_pick, starter)
             players = [{"id": r["id"], "name": r["name"]} for r in (cur_block or {}).get("rushers", []) if r["kind"] in ("rb", "other")] \
                 or [{"id": d["gsis_id"], "name": d["name"]} for d in dep]
             rows.append({
@@ -198,6 +269,7 @@ def week_report(season: int, week: int, games: list[dict], cur: LeagueWindow, pr
                 "starter": starter,
                 "seasons": {str(cur.season): cur_block, str(prior.season): side_block(prior, off, dfn, dep, starter, players)},
             })
+    players = roster(cur, depth_by_game)
     bands = [{"key": k, "label": label, "min": lo} for k, label, lo in EDGE["bands"]]
     return {
         "schema": SCHEMA_VERSION,
@@ -214,6 +286,10 @@ def week_report(season: int, week: int, games: list[dict], cur: LeagueWindow, pr
         "games": [{"game_id": g["game_id"], "away": g["away_team"], "home": g["home_team"], "gameday": g["gameday"],
                    "gametime": g["gametime"], "stadium": g.get("stadium")} for g in games],
         "rows": rows,
+        # Player page / defense page: every RB in `players` and every defense, per season (never combined).
+        "players": players,
+        "buckets": {group: [{"key": k, "label": label} for k, label in buckets] for group, buckets in GROUPS},
+        "pool": {str(cur.season): pool_block(cur, players, scheme_pick), str(prior.season): pool_block(prior, players)},
         "edge": {
             "bands": bands,
             "min_coverage": EDGE["min_coverage"],
@@ -241,8 +317,17 @@ def week_report(season: int, week: int, games: list[dict], cur: LeagueWindow, pr
             f"RB direction / gap / box splits: at least {QUALIFIERS['rusher_bucket_att_per_team_game']:g} carries per team game in the bucket (current season), {QUALIFIERS['rusher_bucket_min_att_prior']} (prior season).",
             f"Defense direction / gap / box splits: at least {QUALIFIERS['bucket_att_per_team_game']:g} designed runs faced per game in the bucket (current season), {QUALIFIERS['bucket_min_att_prior']} (prior season).",
         ],
+        "scheme": {
+            "status": scheme_pick.get("status"),
+            "exported_at": scheme_pick["exported"].strftime("%Y-%m-%dT%H:%MZ") if "exported" in scheme_pick else None,
+            "note": scheme_note,
+            "qualifier": qualifier_note(),
+            "def_status": DEF_STATUS,
+            "league": {k: {m: _round(x) for m, x in v.items()} for k, v in (scheme_pick.get("league") or {}).items()},
+        },
         "sources": [
             "nflverse play-by-play, schedules, weekly rosters, depth charts, snap counts (nflreadpy)",
+            "Data Suite rushing export: each RB's zone vs man/gap concept carries, YPC and success % (run-scheme table only)",
             "Pro Football Reference advanced rushing via nflverse (load_pfr_advstats, stat_type='rush')",
             "FTN charting via nflverse (load_ftn_charting): box counts and QB sneaks",
         ],
