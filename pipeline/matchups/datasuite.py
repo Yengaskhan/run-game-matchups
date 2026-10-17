@@ -25,6 +25,7 @@ EXPORT_RE = re.compile(r"Exported from Data Suite.*? on (\d{4}-\d{2}-\d{2} \d{2}
 SCHEMES = [("zone", "Zone runs", "Zone Concept", "ZONE"), ("gap", "Man/gap runs", "Man/Gap Concept", "MAN")]
 # A game counts as covered by an export once it kicked off at least this long before the export.
 GAME_LENGTH = timedelta(hours=4)
+DEF_STATUS = "Defense side needs a Data Suite run-defense export (zone vs man/gap concept splits allowed by each defense)."
 ET = ZoneInfo("America/New_York")
 
 
@@ -166,30 +167,46 @@ def pick_rushing_export(schedule: pl.DataFrame, window_games: set[str], week: in
                       "from this report's weeks. Add a newer export to show run-scheme splits."}
 
 
+def _r4(v):
+    return None if v is None else round(v, 4)  # same rounding as the rest of the JSON
+
+
+def _scheme_off(rec: dict | None, key: str) -> dict:
+    rec = rec or {}
+    off = {"att": int(rec.get(f"{key}_att") or 0), "share": _r4(rec.get(f"{key}_share")),
+           "ypc": _r4(rec.get(f"{key}_ypc")), "sr": _r4(rec.get(f"{key}_sr")), "ranks": {}}
+    for m in ("sr", "ypc"):
+        if rec.get(f"{key}_{m}_rank") is not None:
+            off["ranks"][m] = [int(rec[f"{key}_{m}_rank"]), int(rec[f"{key}_{m}_n"])]
+    return off
+
+
+def _scheme_rec(pick: dict, pid: str | None) -> dict | None:
+    if "df" not in pick or not pid:
+        return None
+    hit = pick["df"].filter(pl.col("player_id") == pid)
+    return hit.to_dicts()[0] if hit.height else None
+
+
+def scheme_player(pick: dict, pid: str) -> dict | None:
+    """One RB's zone / man-gap splits for the player page: {zone: {...}, gap: {...}}, or None if he isn't in the export."""
+    rec = _scheme_rec(pick, pid)
+    return {key: _scheme_off(rec, key) for key, *_ in SCHEMES} if rec else None
+
+
 def scheme_block(pick: dict, starter: dict | None) -> dict:
     """The starting RB's zone vs man/gap splits for one row (current season only)."""
     if "df" not in pick:
         return {"status": pick["status"], "rows": []}
-    rec = None
-    if starter:
-        hit = pick["df"].filter(pl.col("player_id") == starter["id"])
-        rec = hit.to_dicts()[0] if hit.height else None
-    rows = []
-    for key, label, *_ in SCHEMES:
-        r4 = lambda v: None if v is None else round(v, 4)  # noqa: E731  (same rounding as the rest of the JSON)
-        off = {"att": int((rec or {}).get(f"{key}_att") or 0), "share": r4((rec or {}).get(f"{key}_share")),
-               "ypc": r4((rec or {}).get(f"{key}_ypc")), "sr": r4((rec or {}).get(f"{key}_sr")), "ranks": {}}
-        for m in ("sr", "ypc"):
-            if rec and rec.get(f"{key}_{m}_rank") is not None:
-                off["ranks"][m] = [int(rec[f"{key}_{m}_rank"]), int(rec[f"{key}_{m}_n"])]
-        rows.append({"key": key, "label": label, "off": off, "def": None, "edge": None,
-                     "league": {k: r4(v) for k, v in (pick["league"].get(key) or {}).items()}})
+    rec = _scheme_rec(pick, starter["id"] if starter else None)
+    rows = [{"key": key, "label": label, "off": _scheme_off(rec, key), "def": None, "edge": None,
+             "league": {k: _r4(v) for k, v in (pick["league"].get(key) or {}).items()}} for key, label, *_ in SCHEMES]
     return {
         "status": None if rec else f"{starter['name'] if starter else 'This RB'} isn't in the Data Suite rushing export.",
         "source": "Data Suite",
         "exported_at": pick["exported"].strftime("%Y-%m-%dT%H:%MZ"),
         "extra_games": pick["extra"],
-        "def_status": "Defense side needs a Data Suite run-defense export (zone vs man/gap concept splits allowed by each defense).",
+        "def_status": DEF_STATUS,
         "rows": rows,
     }
 

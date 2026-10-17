@@ -6,11 +6,11 @@ export interface Metrics {
   att: number;
   share?: number | null;
   ypc: number | null;
-  epa: number | null;
   sr: number | null;
-  expl: number | null;
-  stuff: number | null;
-  ranks: Partial<Record<'ypc' | 'epa' | 'sr' | 'expl' | 'stuff' | 'ybc_att' | 'yac_att', Rank>>;
+  /** Overall lines only (not splits). */
+  expl?: number | null;
+  stuff?: number | null;
+  ranks: Partial<Record<'ypc' | 'sr' | 'expl' | 'stuff' | 'ybc_att' | 'yac_att', Rank>>;
 }
 
 export interface Overall extends Metrics {
@@ -47,7 +47,6 @@ export interface Rusher {
   carry_share?: number | null;
   snap_share?: number | null;
   ypc: number | null;
-  epa: number | null;
   sr: number | null;
   ybc_att: number | null;
   yac_att: number | null;
@@ -56,12 +55,20 @@ export interface Rusher {
 }
 
 /** Run scheme (blocking concept) splits from a Data Suite export; current season only. */
+export interface SchemeSide {
+  att: number;
+  share: number | null;
+  ypc: number | null;
+  sr: number | null;
+  ranks: Partial<Record<'sr' | 'ypc', Rank>>;
+}
+
 export interface SchemeRow {
   key: 'zone' | 'gap';
   label: string;
-  off: { att: number; share: number | null; ypc: number | null; sr: number | null; ranks: Partial<Record<'sr' | 'ypc', Rank>> };
+  off: SchemeSide;
   /** Filled once a Data Suite run-defense export is added. */
-  def: { att: number; share: number | null; ypc: number | null; sr: number | null; ranks: Partial<Record<'sr' | 'ypc', Rank>> } | null;
+  def: SchemeSide | null;
   edge: number | null;
   league?: { sr?: number | null; ypc?: number | null };
 }
@@ -106,6 +113,39 @@ export interface MatchupRow {
   seasons: Record<string, SeasonBlock | null>;
 }
 
+/** A split table keyed by group then bucket, e.g. splits.direction.left. */
+export type SplitTables = Partial<Record<SplitGroup, Record<string, Metrics>>>;
+
+/** One RB's own designed runs in one season (current: for `team`; prior: any team, `team` = "ATL/NYJ"). */
+export interface PoolPlayer {
+  team: string | null;
+  overall: Overall;
+  splits: SplitTables;
+  /** Current season only: Data Suite zone / man-gap splits, or null when he isn't in the export. */
+  scheme?: Record<'zone' | 'gap', SchemeSide> | null;
+}
+
+export interface PoolDefense {
+  team: string;
+  overall: Overall;
+  splits: SplitTables;
+}
+
+export interface Pool {
+  players: Record<string, PoolPlayer>;
+  defenses: Record<string, PoolDefense>;
+  league: { overall: { sr: number | null; ypc: number | null } } & Partial<Record<SplitGroup, Record<string, { share: number | null; sr: number | null; ypc: number | null }>>>;
+}
+
+/** Everyone the player page lists, on their current team. depth = "RB1"… when on this week's depth chart. */
+export interface PlayerEntry {
+  id: string;
+  name: string;
+  team: string;
+  pos: string;
+  depth: string | null;
+}
+
 export interface WeekReport {
   schema: number;
   season: number;
@@ -116,13 +156,17 @@ export interface WeekReport {
   seasons: { season: number; label: string; weeks: number[]; pfr_weeks: number[]; current: boolean; empty: string | null }[];
   games: { game_id: string; away: string; home: string; gameday: string; gametime: string | null; stadium: string | null }[];
   rows: MatchupRow[];
+  players: PlayerEntry[];
+  buckets: Record<SplitGroup, { key: string; label: string }[]>;
+  /** Per season; null when that season has no games in the window. */
+  pool: Record<string, Pool | null>;
   edge: { bands: { key: BandKey; label: string; min: number }[]; min_coverage: number; definition: string };
   notes: string[];
   filters: string[];
   qualifiers: string[];
   sources: string[];
   checks: string[];
-  scheme?: { status: string | null; exported_at: string | null; note: string | null; qualifier: string };
+  scheme?: { status: string | null; exported_at: string | null; note: string | null; qualifier: string; def_status?: string; league?: Partial<Record<'zone' | 'gap', { sr?: number | null; ypc?: number | null }>> };
 }
 
 export interface SeasonIndex {

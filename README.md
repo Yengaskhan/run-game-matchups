@@ -1,6 +1,6 @@
 # ClevAnalytics Run Game Matchup Report
 
-A weekly matchup report as its own website. Pick a week and every team playing gets one row: its starting RB, on his own carries, against the opposing run defense, scored as a Run Edge, with a View button for the details. It uses free [nflverse](https://nflverse.nflverse.com/) data only.
+A weekly matchup report as its own website. Pick a week and every team playing gets one row: its starting RB, on his own carries, against the opposing run defense, scored as a Run Edge. Click a back for his player page (him against this week's opponent, or any other defense), or an opponent for its defense profile. It uses free [nflverse](https://nflverse.nflverse.com/) data only.
 
 It has two parts:
 - **Pipeline** (`pipeline/`, Python + [nflreadpy](https://github.com/nflverse/nflreadpy)): pulls nflverse data, computes everything, runs the validation checks, and writes one JSON file per week to `data/<season>/week-XX.json` (every offense playing that week, with both seasons' numbers), plus `data/<season>/index.json`.
@@ -103,7 +103,7 @@ nflverse doesn't chart blocking schemes, so these come from your Data Suite expo
 **What the page shows:**
 - Each starter's success rate and YPC on zone runs and on man/gap runs, ranked among RBs with at least 2 carries of that type per game played.
 - The league average for each run type.
-- Where to find them: a "Run scheme" table in each View panel, and **Zone runs** / **Man/gap runs** in the Split menu.
+- Where to find them: a "Run scheme" panel on the player page, and **Zone runs** / **Man/gap runs** in the Split menu.
 - They're labeled as Data Suite and kept separate from the nflverse numbers. Data Suite counts all of a back's carries, so totals can differ slightly from the nflverse designed runs.
 
 **Adding an export** (whenever you want fresher numbers, typically once per week after Sunday):
@@ -162,7 +162,7 @@ Every row still shows its numbers; a row that misses the qualifier just shows ra
 
 - **RB side:** the starting RB only. That's RB1 on the nflverse depth chart, using the snapshot before kickoff day for games already played. It counts his own designed runs: for this team in the current season, and his full line for any team in the prior season. QB runs and backups are left out. He's ranked among non-QB rushers with enough carries, overall (6.25 per team game) and in each direction / gap / box bucket (2 per team game; 20 in the prior season).
 - **Defense side:** the defense against every rusher, ranked among the 32 defenses.
-- **Backs table** (under View): every back on the team, with QB runs and the team total, for context.
+- **Backfield table** (player page): every back on the team, with QB runs and the team total, for context.
 
 ## Run Edge
 
@@ -174,16 +174,21 @@ A 0–100 score, 50 = even, shaded green (RB edge) to orange (defense edge).
 
 ## Report layout
 
-- **Header:** week, **Season** selector (current season to date, or the full prior season; never combined), **Split** selector, **Find team** box, and the colour legend.
-- **Main table:** one row per offense playing that week, led by its starting RB (RB1 on the nflverse depth chart, with his carries and share of the team's designed runs), then opponent, the RB's success rate and YPC (ranked among RBs) and the defense's success rate and YPC allowed (ranked among defenses), with attempts, his main run direction, and Run Edge. Every column sorts.
-- **View** opens the detail under the row:
-  - one-line stat strips for the RB and the defense (success, YPC, explosive, stuffed, YBC, YAC, with ranks)
-  - one table of direction / gap / box splits: offense | defense | edge
-  - up to two takeaways (best and toughest gap for the offense)
-  - the backs: depth-chart order, carry and snap share, efficiency, YBC vs YAC
+Three tabs, like the WR/TE report. **Week** and **Season data** (current season to date, or the full prior season; never combined) sit above them and apply to all three.
+
+- **Slate Rankings:** one row per offense playing that week, led by its starting RB (RB1 on the nflverse depth chart, with his carries and share of the team's designed runs), then opponent, the RB's success rate and YPC (ranked among RBs) and the defense's success rate and YPC allowed (ranked among defenses), with attempts, his main run direction, and Run Edge. Every column sorts. **Split** swaps the table to one direction or run scheme. Clicking a row opens the player page; clicking the opponent opens its defense profile.
+- **Player vs Defense:** pick any RB (search box) and any opponent (defaults to this week's).
+  - cards: Run Edge, his success rate and YPC (with what the defense allows), and his best and toughest gap
+  - stat strips for the RB and the defense (success, YPC, explosive, stuffed, YBC, YAC, with ranks)
+  - direction / gap / box splits: his carries | the defense's allowed | edge
+  - run scheme (zone vs man/gap, Data Suite, current season)
+  - his team's backfield (click a back to switch to him)
+- **Defense Profiles:** pick any defense. What it allows overall, then direction / gap / box cards: share of runs faced vs the league, and success / YPC allowed in each (green = allows more than the league). Below: this week's opposing backs with their Run Edge, and the best and toughest of this week's starting RBs if they faced it.
 - **Footer** (collapsed): Run Edge definition, notes, filters, qualifiers, sources and the validation checks.
 
-The selected week, season, split and open row live in the URL hash (`#week=3&season=2026&split=all&open=BAL`), so links go straight to a view.
+Each week file carries every listed RB and all 32 defenses per season (`players`, `pool`), so the page scores any pairing in the browser (`src/edge.ts`) with the same formula as the pipeline. The tests check it reproduces every pipeline edge exactly.
+
+The view lives in the URL hash (`#tab=player&player=00-0041027&opp=SF&week=6`), so links go straight to it.
 
 ## Adding another matchup type later (e.g. pass coverage)
 
@@ -198,5 +203,6 @@ Each row's season block is self-contained (`pipeline/matchups/weekly.py`, types 
   - seasons are labeled and never mixed
   - shares sum to 100%
   - rusher rows sum to the team total
+  - the browser's Run Edge (`src/edge.ts`, used by the player and defense pages) matches the pipeline's on every row and split
   - edges are within 0–100
   - every rank is within its peer group

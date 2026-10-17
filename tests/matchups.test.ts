@@ -2,6 +2,7 @@ import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { defaultWeek } from '../src/data';
+import { matchup } from '../src/edge';
 import { formatCell, formatKickoff } from '../src/format';
 import type { SeasonIndex, WeekReport } from '../src/types';
 
@@ -41,6 +42,10 @@ describe.each(seasons)('matchup reports %s', (season) => {
       expect(r.rows.filter((x) => x.game_id === g.game_id).map((x) => [x.offense, x.defense]).sort()).toEqual([[g.away, g.home], [g.home, g.away]].sort());
     }
 
+    // Everyone in the player list is unique, and every starter is in it.
+    expect(new Set(r.players.map((p) => p.id)).size).toBe(r.players.length);
+    for (const row of r.rows) if (row.starter) expect(r.players.some((p) => p.id === row.starter!.id && p.team === row.offense), `${row.offense} starter listed`).toBe(true);
+
     for (const row of r.rows) {
       // Starting RB (depth-chart RB1) is present on every row, or explicitly null.
       expect(row.starter === null || (typeof row.starter?.id === 'string' && row.starter.name.length > 0), `${row.offense} starter`).toBe(true);
@@ -68,6 +73,21 @@ describe.each(seasons)('matchup reports %s', (season) => {
         const total = b.rushers.find((x) => x.kind === 'total');
         if (total) expect(b.rushers.filter((x) => x.kind !== 'total').reduce((a, x) => a + x.att, 0), `${where} rushers vs total`).toBe(total.att);
         expect(b.takeaways.length).toBeLessThanOrEqual(2);
+        // The player / defense pages score any RB vs any defense in the browser (src/edge.ts). Here they
+        // must reproduce the pipeline's own edge for every scheduled matchup, split by split.
+        const pool = r.pool[String(meta.season)];
+        expect(pool, `${where} pool`).toBeTruthy();
+        if (pool) {
+          expect(Object.keys(pool.defenses).length).toBe(32);
+          const ps = row.starter ? pool.players[row.starter.id] : undefined;
+          if (b.overall.off.att > 0) expect(ps?.overall, `${where} pool player`).toEqual(b.overall.off);
+          expect(pool.defenses[row.defense].overall).toEqual(b.overall.def);
+          const m = matchup(ps, pool.defenses[row.defense], r);
+          expect(m.run_edge, `${where} run edge`).toBe(b.run_edge);
+          expect(m.small, `${where} small sample`).toBe(b.small_sample);
+          expect(m.band, `${where} band`).toBe(b.band);
+          expect(m.splits.map((s) => [s.group, s.key, s.edge]), `${where} split edges`).toEqual(b.splits.map((s) => [s.group, s.key, s.edge]));
+        }
         // Run scheme (Data Suite): current season only; shares can't exceed 100%; ranks within peer group.
         if (b.scheme) {
           expect(meta.current, `${where} scheme only in current season`).toBe(true);
@@ -92,8 +112,6 @@ describe('default week', () => {
 
 describe('formatting', () => {
   it('formats cells', () => {
-    expect(formatCell(0.1234, 'epa')).toBe('+0.12');
-    expect(formatCell(-0.05, 'epa')).toBe('−0.05');
     expect(formatCell(0.456, 'pct')).toBe('46%');
     expect(formatCell(4.8214, 'dec1')).toBe('4.8');
     expect(formatCell(null, 'pct')).toBe('—');
