@@ -96,6 +96,33 @@ When play-by-play is a day behind, the message says so; re-run later.
 
 **PFR lag:** Pro Football Reference (yards before / after contact) often trails play-by-play by a day or two, especially after Monday night. The run doesn't stop. YBC / YAC use the weeks PFR has for every game, for every team so the samples match, and everything else uses every completed week. The page flags it in amber ("YBC/YAC: weeks 1–2 (PFR not yet updated)"), and the next run fills it in.
 
+## Run scheme: zone vs man/gap (Data Suite)
+
+nflverse doesn't chart blocking schemes, so these come from your Data Suite exports.
+
+**What the page shows:**
+- Each starter's success rate and YPC on zone runs and on man/gap runs, ranked among RBs with at least 2 carries of that type per game played.
+- The league average for each run type.
+- Where to find them: a "Run scheme" table in each View panel, and **Zone runs** / **Man/gap runs** in the Split menu.
+- They're labeled as Data Suite and kept separate from the nflverse numbers. Data Suite counts all of a back's carries, so totals can differ slightly from the nflverse designed runs.
+
+**Adding an export** (whenever you want fresher numbers, typically once per week after Sunday):
+
+```bash
+.venv/bin/python pipeline/import_datasuite.py ~/Downloads/rushing-stats.csv
+git add imports && git commit -m "Data Suite export" && git push
+```
+
+The import step checks the file, reads its export time from the "Exported from Data Suite … UTC" footer, and files it as `imports/datasuite/rushing/<export time>.csv`. The next pipeline run (manual or scheduled) uses it.
+
+**Which export a week uses:**
+- The earliest export that covers every game in that report's weeks.
+- An export taken mid-week, after Thursday's game but before Sunday, still fits that week's report. The page notes the extra game.
+- A finished week never uses an export that includes its own or later games.
+- With no fitting export, the week shows a note instead of numbers. A stale export is never shown as current.
+
+**Defense side:** the defense columns and a per-scheme Run Edge (from success rate) need a Data Suite run-defense export with the same zone / man-gap concept splits allowed by each defense. Until then those cells read "needs defense export".
+
 ## Changing the qualifiers
 
 Every tunable number is in `pipeline/matchups/config.py`. Edit it, then re-run the pipeline:

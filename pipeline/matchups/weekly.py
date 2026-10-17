@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 import polars as pl
 
 from . import fmt
+from .datasuite import qualifier_note, scheme_block
 from .config import BOX_BUCKETS, DIRECTIONS, EDGE, EXPLOSIVE_YARDS, GAPS, QUALIFIERS, SCHEMA_VERSION
 from .metrics import agg_exprs, nan_to_none, pct_from_rank
 from .plays import FILTERS
@@ -182,7 +183,10 @@ def takeaways(name: str, dfn: str, splits: list[dict], att: int, w: LeagueWindow
 # ------------------------------------------------------------------------------------------------
 
 def week_report(season: int, week: int, games: list[dict], cur: LeagueWindow, prior: LeagueWindow,
-                depth_by_game: dict[str, dict[str, list[dict]]], checks: list[str]) -> dict:
+                depth_by_game: dict[str, dict[str, list[dict]]], checks: list[str],
+                scheme_pick: dict | None = None, scheme_note: str | None = None) -> dict:
+    """scheme_pick: the Data Suite rushing export chosen for this week (see datasuite.pick_rushing_export)."""
+    scheme_pick = scheme_pick or {"status": "No Data Suite rushing export has been added yet."}
     rows = []
     for g in games:
         depth = depth_by_game[g["game_id"]]
@@ -190,6 +194,9 @@ def week_report(season: int, week: int, games: list[dict], cur: LeagueWindow, pr
             dep = depth.get(off, [])
             starter = {"id": dep[0]["gsis_id"], "name": dep[0]["name"]} if dep else None
             cur_block = side_block(cur, off, dfn, dep, starter)
+            if cur_block:
+                # Run scheme (zone vs man/gap): Data Suite, current season only, kept apart from nflverse numbers.
+                cur_block["scheme"] = scheme_block(scheme_pick, starter)
             players = [{"id": r["id"], "name": r["name"]} for r in (cur_block or {}).get("rushers", []) if r["kind"] in ("rb", "other")] \
                 or [{"id": d["gsis_id"], "name": d["name"]} for d in dep]
             rows.append({
@@ -241,8 +248,15 @@ def week_report(season: int, week: int, games: list[dict], cur: LeagueWindow, pr
             f"RB direction / gap / box splits: at least {QUALIFIERS['rusher_bucket_att_per_team_game']:g} carries per team game in the bucket (current season), {QUALIFIERS['rusher_bucket_min_att_prior']} (prior season).",
             f"Defense direction / gap / box splits: at least {QUALIFIERS['bucket_att_per_team_game']:g} designed runs faced per game in the bucket (current season), {QUALIFIERS['bucket_min_att_prior']} (prior season).",
         ],
+        "scheme": {
+            "status": scheme_pick.get("status"),
+            "exported_at": scheme_pick["exported"].strftime("%Y-%m-%dT%H:%MZ") if "exported" in scheme_pick else None,
+            "note": scheme_note,
+            "qualifier": qualifier_note(),
+        },
         "sources": [
             "nflverse play-by-play, schedules, weekly rosters, depth charts, snap counts (nflreadpy)",
+            "Data Suite rushing export: each RB's zone vs man/gap concept carries, YPC and success % (run-scheme table only)",
             "Pro Football Reference advanced rushing via nflverse (load_pfr_advstats, stat_type='rush')",
             "FTN charting via nflverse (load_ftn_charting): box counts and QB sneaks",
         ],

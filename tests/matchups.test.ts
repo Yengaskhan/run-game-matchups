@@ -68,6 +68,12 @@ describe.each(seasons)('matchup reports %s', (season) => {
         const total = b.rushers.find((x) => x.kind === 'total');
         if (total) expect(b.rushers.filter((x) => x.kind !== 'total').reduce((a, x) => a + x.att, 0), `${where} rushers vs total`).toBe(total.att);
         expect(b.takeaways.length).toBeLessThanOrEqual(2);
+        // Run scheme (Data Suite): current season only; shares can't exceed 100%; ranks within peer group.
+        if (b.scheme) {
+          expect(meta.current, `${where} scheme only in current season`).toBe(true);
+          expect(b.scheme.rows.reduce((a, x) => a + (x.off.share ?? 0), 0), `${where} scheme shares`).toBeLessThanOrEqual(1.001);
+          for (const x of b.scheme.rows) for (const [rank, n] of Object.values(x.off.ranks)) expect(rank >= 1 && rank <= n, `${where} ${x.key} rank`).toBe(true);
+        }
       }
     }
   });

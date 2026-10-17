@@ -2,7 +2,7 @@ import { Fragment, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { defaultWeek, listSeasons, loadWeek } from './data';
 import { formatCell, formatDate, formatKickoff } from './format';
 import { TeamLogo, teamName } from './TeamLogo';
-import type { BandKey, MatchupRow, Metrics, Rank, SeasonBlock, Split, WeekReport } from './types';
+import type { BandKey, MatchupRow, Metrics, Rank, SchemeRow, SeasonBlock, Split, WeekReport } from './types';
 
 /** True when the page runs inside an iframe (e.g. embedded on a website-builder page). */
 const embedded = (() => {
@@ -13,7 +13,7 @@ const embedded = (() => {
   }
 })();
 
-type SplitKey = 'all' | 'left' | 'middle' | 'right';
+type SplitKey = 'all' | 'left' | 'middle' | 'right' | 'zone' | 'gap';
 type SortKey = 'offense' | 'defense' | 'off_sr' | 'off_ypc' | 'def_sr' | 'def_ypc' | 'share' | 'edge';
 
 /** Selection lives in the URL hash so a view can be linked directly. */
@@ -124,6 +124,14 @@ export default function MatchupApp() {
     if (split === 'all') {
       return { b, off: b.overall.off as Metrics, def: b.overall.def as Metrics, share: b.top_direction, edge: b.run_edge, small: b.small_sample, band: b.band };
     }
+    if (split === 'zone' || split === 'gap') {
+      // Run scheme (Data Suite): current season only; the defense side waits for its own export.
+      const sc = b.scheme?.rows.find((x) => x.key === split);
+      if (!sc) return null;
+      // No defense export yet: blank cells (att null hides the "n=" line).
+      const m = (x: SchemeRow['off'] | null) => (x ? ({ ...x, expl: null, stuff: null, epa: null } as Metrics) : ({ att: null, ypc: null, sr: null, expl: null, stuff: null, epa: null, ranks: {} } as unknown as Metrics));
+      return { b, off: m(sc.off), def: m(sc.def), share: { key: sc.key, label: sc.label, share: sc.off.share ?? 0, att: sc.off.att }, edge: sc.edge, small: false, band: bandFor(sc.edge, report!.edge.bands) };
+    }
     const s = b.splits.find((x) => x.group === 'direction' && x.key === split);
     if (!s) return null;
     return { b, off: s.off, def: s.def, share: { key: s.key, label: s.label, share: s.off.share ?? 0, att: s.off.att }, edge: s.edge, small: false, band: bandFor(s.edge, report!.edge.bands) };
@@ -179,7 +187,7 @@ export default function MatchupApp() {
     </th>
   );
 
-  const splitLabel = split === 'all' ? null : split[0].toUpperCase() + split.slice(1);
+  const splitLabel = split === 'all' ? null : split === 'zone' ? 'Zone' : split === 'gap' ? 'Man/gap' : split[0].toUpperCase() + split.slice(1);
 
   return (
     <div className="flex min-h-full flex-col">
@@ -217,7 +225,7 @@ export default function MatchupApp() {
                 <Select label="Season" value={season ?? ''} onChange={setSeason} options={report.seasons.map((s) => [String(s.season), s.label])} />
               )}
               <Select label="Split" value={split} onChange={(v) => setSplit(v as SplitKey)}
-                options={[['all', 'All runs'], ['left', 'Left'], ['middle', 'Middle'], ['right', 'Right']]} />
+                options={[['all', 'All runs'], ['left', 'Left'], ['middle', 'Middle'], ['right', 'Right'], ['zone', 'Zone runs (Data Suite)'], ['gap', 'Man/gap runs (Data Suite)']]} />
               <label className="flex flex-col gap-1 text-[10.5px] font-medium uppercase tracking-wider text-ink-3">
                 Find team or RB
                 <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Team or RB" className="h-8 w-32 rounded border border-line-2 bg-panel-2 px-2 text-[13px] normal-case tracking-normal text-ink placeholder:text-ink-3" />
@@ -239,6 +247,17 @@ export default function MatchupApp() {
               </span>
             </div>
 
+            {(split === 'zone' || split === 'gap') && (
+              <p className="mt-3 rounded-md border border-line-2 bg-panel-2 px-3 py-2 text-[12px] text-ink-2">
+                <span className="font-semibold text-ink">Run scheme: {split === 'zone' ? 'zone' : 'man/gap'} runs, from Data Suite.</span>{' '}
+                {seasonMeta && !seasonMeta.current
+                  ? 'These splits are current season only; switch Season back to see them.'
+                  : !report.scheme
+                    ? 'This week was built before run-scheme splits were added, so there are none for it.'
+                    : report.scheme.status ?? `Each RB's success rate and YPC on ${split === 'zone' ? 'zone' : 'man/gap'} runs, ranked among RBs. The defense side and Run Edge fill in once a Data Suite run-defense export is added.`}
+                {report.scheme?.note && seasonMeta?.current && <span className="block text-ink-3">{report.scheme.note}</span>}
+              </p>
+            )}
             {seasonMeta && !seasonMeta.current && (
               <p className="mt-3 rounded-md border border-line-2 bg-panel-2 px-3 py-2 text-[12px] text-ink-2">
                 <span className="font-semibold text-ink">Prior season: {seasonMeta.label}.</span> This week's matchups scored with last season's numbers
@@ -256,8 +275,8 @@ export default function MatchupApp() {
                       <Th k="defense" className="hidden sm:table-cell">Opponent</Th>
                       <Th k="off_sr" className="text-right">{splitLabel ? `RB Succ. · ${splitLabel}` : 'RB Success'}</Th>
                       <Th k="off_ypc" className="text-right">{splitLabel ? `RB YPC · ${splitLabel}` : 'RB YPC'}</Th>
-                      <Th k="def_sr" className="text-right">{splitLabel ? `Def Succ. al. · ${splitLabel}` : 'Def Succ. allowed'}</Th>
-                      <Th k="def_ypc" className="text-right">{splitLabel ? `Def YPC al. · ${splitLabel}` : 'Def YPC allowed'}</Th>
+                      <Th k="def_sr" className="text-right">{splitLabel ? `Def Succ. · ${splitLabel}` : 'Def Succ. allowed'}</Th>
+                      <Th k="def_ypc" className="text-right">{splitLabel ? `Def YPC · ${splitLabel}` : 'Def YPC allowed'}</Th>
                       <Th k="share" className="text-right">{splitLabel ? `${splitLabel} share` : 'Main direction'}</Th>
                       <Th k="edge" className="text-center">Run edge</Th>
                       <Th className="text-center">View</Th>
@@ -465,6 +484,8 @@ function Detail({ row, b, report, onClose }: { row: MatchupRow; b: SeasonBlock; 
         </table>
       </div>
 
+      {b.scheme && <SchemeTable scheme={b.scheme} rb={rb} dfn={dfn} report={report} />}
+
       {b.takeaways.length > 0 && (
         <ul className="mt-3 list-disc space-y-0.5 pl-5 text-[12px] text-ink-2 marker:text-ink-3">
           {b.takeaways.map((t, i) => (
@@ -477,6 +498,69 @@ function Detail({ row, b, report, onClose }: { row: MatchupRow; b: SeasonBlock; 
     </div>
   );
 }
+
+function SchemeTable({ scheme, rb, dfn, report }: { scheme: NonNullable<SeasonBlock['scheme']>; rb: string; dfn: string; report: WeekReport }) {
+  const exported = scheme.exported_at ? formatDate(scheme.exported_at.slice(0, 10), { month: 'short', day: 'numeric' }) : null;
+  const hasRows = scheme.rows.length > 0 && !scheme.status;
+  return (
+    <div className="mt-3">
+      <h3 className="text-[11px] font-semibold uppercase tracking-wider text-ink-3">
+        Run scheme: zone vs man/gap <span className="font-normal normal-case tracking-normal">· Data Suite{exported ? ` export of ${exported}` : ''} (not nflverse)</span>
+      </h3>
+      {!hasRows ? (
+        <p className="mt-1 rounded border border-line bg-panel px-3 py-2 text-[12px] text-ink-2">{scheme.status}</p>
+      ) : (
+        <div className="mt-1 overflow-x-auto rounded border border-line">
+          <table className="num w-full min-w-[640px] border-collapse text-[12px]">
+            <thead className="bg-panel-2/70 text-[10.5px] uppercase tracking-wider text-ink-3">
+              <tr>
+                <th rowSpan={2} className="sticky left-0 z-10 bg-panel-2 px-3 py-1.5 text-left font-medium">Scheme</th>
+                <th colSpan={4} className="border-l border-line px-2 py-1.5 font-medium text-ink-2">{rb}</th>
+                <th rowSpan={2} className="border-l border-line px-2 py-1.5 font-medium" title="League-average success rate on this run type (Data Suite)">Lg succ.</th>
+                <th colSpan={2} className="border-l border-line px-2 py-1.5 font-medium text-ink-2">{dfn} defense</th>
+                <th rowSpan={2} className="border-l border-line px-2 py-1.5 font-medium" title={report.edge.definition}>Edge</th>
+              </tr>
+              <tr className="text-right">
+                {['Att', 'Share', 'Success', 'YPC', 'Succ. al.', 'YPC al.'].map((h, i) => (
+                  <th key={i} className={`px-2 pb-1.5 font-medium ${i === 0 || i === 4 ? 'border-l border-line' : ''}`}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {scheme.rows.map((r) => (
+                <tr key={r.key} className="border-t border-line/50">
+                  <th scope="row" className="sticky left-0 z-10 bg-panel px-3 py-1.5 text-left font-medium">{r.label}</th>
+                  <td className="border-l border-line px-2 py-1.5 text-right text-ink-2">{r.off.att}</td>
+                  <td className="px-2 py-1.5 text-right">{formatCell(r.off.share, 'pct')}</td>
+                  <td className="px-2 py-1.5 text-right"><Stat v={r.off.sr} fmt="pct" rank={r.off.ranks.sr} /></td>
+                  <td className="px-2 py-1.5 text-right"><Stat v={r.off.ypc} fmt="dec1" rank={r.off.ranks.ypc} /></td>
+                  <td className="border-l border-line px-2 py-1.5 text-right text-ink-2">{formatCell(r.league?.sr ?? null, 'pct')}</td>
+                  {r.def ? (
+                    <>
+                      <td className="border-l border-line px-2 py-1.5 text-right"><Stat v={r.def.sr} fmt="pct" rank={r.def.ranks.sr} /></td>
+                      <td className="px-2 py-1.5 text-right"><Stat v={r.def.ypc} fmt="dec1" rank={r.def.ranks.ypc} /></td>
+                    </>
+                  ) : (
+                    <td colSpan={2} className="border-l border-line px-2 py-1.5 text-center text-[11px] text-ink-3">needs defense export</td>
+                  )}
+                  <td className="border-l border-line px-2 py-1.5 text-center">
+                    <EdgeBadge edge={r.edge} band={bandFor(r.edge, report.edge.bands)} />
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      <p className="mt-1 text-[10.5px] text-ink-3">
+        Zone vs man/gap is how the line blocked the run. Data Suite counts all of his carries, so totals can differ slightly from the nflverse designed-run numbers above.{' '}
+        {report.scheme?.qualifier}
+        {hasRows && scheme.def_status ? ` ${scheme.def_status}` : ''}
+      </p>
+    </div>
+  );
+}
+
 
 function SplitCells({ m, first }: { m: Metrics; first?: boolean }) {
   return (
@@ -601,7 +685,8 @@ function Footer({ report }: { report: WeekReport }) {
           {block('Notes', report.notes)}
           {block('Filters (designed runs)', report.filters)}
           {block('Rank qualifiers', report.qualifiers)}
-          {block('Data source: nflverse', report.sources)}
+          {block('Data sources', report.sources)}
+          {report.scheme && block('Run scheme (Data Suite)', [report.scheme.status ?? `Export of ${report.scheme.exported_at?.replace('T', ' ').replace('Z', ' UTC')} used for this week.`, ...(report.scheme.note ? [report.scheme.note] : []), report.scheme.qualifier])}
           {block('Validation checks run for this week', report.checks)}
         </div>
       </details>

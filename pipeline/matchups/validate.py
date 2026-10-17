@@ -96,6 +96,10 @@ def check_report(report: dict) -> None:
                     vals = [s[unit]["share"] for s in blk["splits"] if s["group"] == group and s[unit]["share"] is not None]
                     if vals and abs(sum(vals) - 1) > 1e-3:
                         raise ValidationError(f"{where}: {unit} {group} shares sum to {sum(vals):.6f}")
+            sc = (blk.get("scheme") or {}).get("rows") or []
+            share = sum(r["off"]["share"] or 0 for r in sc)
+            if share > 1.001:  # zone + man/gap can be under 100% (other / unknown concepts), never over
+                raise ValidationError(f"{where}: run-scheme shares sum to {share:.3f}")
             total = next((r for r in blk["rushers"] if r["kind"] == "total"), None)
             if total:
                 got = sum(r["att"] for r in blk["rushers"] if r["kind"] != "total")

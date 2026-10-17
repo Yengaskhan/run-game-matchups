@@ -155,3 +155,79 @@ def test_rusher_split_is_per_player_ignores_qbs_and_ranks_within_bucket():
     left = s.filter(pl.col("bucket") == "left").sort("rusher_player_id")
     assert left["epa_rank"].to_list() == [1, 2] and left["epa_n"].to_list() == [2, 2]
     assert a.filter(pl.col("bucket") == "right")["epa_rank"].to_list() == [None]  # 1 carry < 2 per game
+
+
+# --- Data Suite run-scheme exports -----------------------------------------------------------
+
+DS_HEADER = (
+    ",Player Details,Player Details,Player Details,Player Details,Player Details,Rushing,Zone Concept,Zone Concept,Zone Concept,Zone Concept,"
+    "Man/Gap Concept,Man/Gap Concept,Man/Gap Concept,Man/Gap Concept,\n"
+    "Season,Rank,Name,Team,POS,G,ATT,ZONE ATT,ZONE ATT %,ZONE YPC,ZONE SUCC %,MAN ATT,MAN ATT %,MAN YPC,MAN SUCC %,player_id\n"
+    "2026,,League Avg,,,,30,15,55,4.2,48.2,12,43,4.1,48,\n"
+)
+
+
+def write_ds(tmp_path, rows, stamp="2026-10-17 16:49"):
+    p = tmp_path / "ds.csv"
+    p.write_text(DS_HEADER + "".join(rows) + f"Exported from Data Suite 2.0 by someone on {stamp} UTC,,,\n")
+    return p
+
+
+def test_parse_rushing_reads_splits_ranks_and_export_time(tmp_path):
+    from matchups.datasuite import parse_rushing
+
+    p = write_ds(tmp_path, [
+        "2026,1,A Back,ATL,RB,5,100,60,60,6.0,62,40,40,3.0,43,00-1\n",
+        "2026,2,B Back,BUF,RB,5,50,20,40,4.0,50,30,60,5.0,57,00-2\n",
+        "2026,3,C Back,DAL,RB,5,12,6,50,4.0,90,6,50,4.0,90,00-3\n",   # too few carries per type to rank
+        "2026,4,Q Back,DAL,QB,5,40,20,50,5.0,60,20,50,5.0,60,00-4\n",  # not an RB: ignored
+    ])
+    df, league, exported = parse_rushing(p)
+    assert exported.isoformat() == "2026-10-17T16:49:00+00:00"
+    assert league["zone"]["sr"] == pytest.approx(0.482)
+    assert sorted(df["player_id"].to_list()) == ["00-1", "00-2", "00-3"]
+    a = df.filter(pl.col("player_id") == "00-1").to_dicts()[0]
+    assert a["zone_sr"] == pytest.approx(0.62) and a["zone_share"] == pytest.approx(0.60) and a["gap_att"] == 40
+    assert (a["zone_sr_rank"], a["zone_sr_n"]) == (1, 2)  # C Back (6 zone carries < 2 x 5 games) isn't ranked
+    c = df.filter(pl.col("player_id") == "00-3").to_dicts()[0]
+    assert c["zone_sr_rank"] is None
+
+
+def test_parse_rushing_rejects_files_without_footer_or_columns(tmp_path):
+    from matchups.datasuite import DataSuiteError, parse_rushing
+
+    p = tmp_path / "bad.csv"
+    p.write_text(DS_HEADER)  # no footer
+    with pytest.raises(DataSuiteError, match="footer"):
+        parse_rushing(p)
+    p.write_text("a,b\nSeason,Rank\n2026,1\nExported from Data Suite 2.0 by x on 2026-10-17 16:49 UTC\n")
+    with pytest.raises(DataSuiteError, match="missing column"):
+        parse_rushing(p)
+
+
+def test_pick_export_needs_full_coverage_and_prefers_the_earliest_that_has_it(tmp_path, monkeypatch):
+    from matchups import datasuite
+
+    sched = pl.DataFrame({
+        "game_id": ["w1", "w2", "w3"], "game_type": ["REG"] * 3, "result": [3, 7, None],
+        "gameday": ["2026-10-04", "2026-10-11", "2026-10-18"], "gametime": ["13:00", "13:00", "13:00"],
+    })
+    folder = tmp_path / "rushing"
+    folder.mkdir()
+    row = ["2026,1,A Back,ATL,RB,5,100,60,60,6.0,62,40,40,3.0,43,00-1\n"]
+    (folder / "2026-10-08T1200Z.csv").write_text(write_ds(tmp_path, row, "2026-10-08 12:00").read_text())
+    (folder / "2026-10-13T1200Z.csv").write_text(write_ds(tmp_path, row, "2026-10-13 12:00").read_text())
+    monkeypatch.setattr(datasuite, "IMPORT_DIR", tmp_path)
+    assert datasuite.pick_rushing_export(sched, {"w1"})["file"].name == "2026-10-08T1200Z.csv"  # earliest that covers
+    assert datasuite.pick_rushing_export(sched, {"w1", "w2"})["file"].name == "2026-10-13T1200Z.csv"
+    stale = datasuite.pick_rushing_export(sched, {"w1", "w2", "w3x"})
+    assert "file" not in stale and "missing 1 game" in stale["status"]
+    # Week numbers: w1 = week 1, w2 = week 2 (both final), w3 = week 2's unplayed game.
+    weeks = sched.with_columns(pl.Series("week", [1, 2, 2]))
+    # Week 2 is still in progress (w3 unplayed). With only the Oct 13 export, which also has week 2's
+    # first game (w2), that's still fine for the week 2 report (window = week 1).
+    (folder / "2026-10-08T1200Z.csv").unlink()
+    assert datasuite.pick_rushing_export(weeks, {"w1"}, week=2)["extra"] == ["w2"]
+    # Week 1 is finished: an export that also has week 2's game doesn't fit it.
+    one = weeks.filter(pl.col("game_id") != "w3")
+    assert "played after them" in datasuite.pick_rushing_export(one, set(), week=1)["status"]

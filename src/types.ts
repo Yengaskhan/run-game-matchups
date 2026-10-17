@@ -55,6 +55,27 @@ export interface Rusher {
   ranks: Metrics['ranks'];
 }
 
+/** Run scheme (blocking concept) splits from a Data Suite export; current season only. */
+export interface SchemeRow {
+  key: 'zone' | 'gap';
+  label: string;
+  off: { att: number; share: number | null; ypc: number | null; sr: number | null; ranks: Partial<Record<'sr' | 'ypc', Rank>> };
+  /** Filled once a Data Suite run-defense export is added. */
+  def: { att: number; share: number | null; ypc: number | null; sr: number | null; ranks: Partial<Record<'sr' | 'ypc', Rank>> } | null;
+  edge: number | null;
+  league?: { sr?: number | null; ypc?: number | null };
+}
+
+export interface Scheme {
+  /** Why there are no rows (no export covering this week, or the RB isn't in it). */
+  status: string | null;
+  source?: string;
+  exported_at?: string;
+  extra_games?: string[];
+  def_status?: string;
+  rows: SchemeRow[];
+}
+
 export type BandKey = 'big_edge' | 'small_edge' | 'neutral' | 'small_disadvantage' | 'big_disadvantage';
 
 export interface SeasonBlock {
@@ -71,6 +92,8 @@ export interface SeasonBlock {
   splits: Split[];
   rushers: Rusher[];
   takeaways: string[];
+  /** Current season only. */
+  scheme?: Scheme;
 }
 
 export interface MatchupRow {
@@ -99,6 +122,7 @@ export interface WeekReport {
   qualifiers: string[];
   sources: string[];
   checks: string[];
+  scheme?: { status: string | null; exported_at: string | null; note: string | null; qualifier: string };
 }
 
 export interface SeasonIndex {
