@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import { matchup, spots, type Matchup } from './edge';
 import { formatCell, formatDate, formatKickoff } from './format';
 import type { HashState, Update } from './MatchupApp';
-import { Backs, PlayerPicker, pfrNote, SchemeTable, SplitTable, StatStrip } from './parts';
+import { Backs, DefenseContext, PlayerPicker, pfrNote, SchemeTable, SplitTable, StatStrip } from './parts';
 import { TeamLogo, teamName } from './TeamLogo';
 import type { PoolDefense, PoolPlayer, SchemeRow, Split, WeekReport } from './types';
 import { Card, EdgeBadge, Panel, Pill, rankPhrase, Select } from './ui';
@@ -91,6 +91,8 @@ export function PlayerView({ report, season, hash, update }: { report: WeekRepor
       <Panel title="Where he runs, and what this defense allows there" note="His carries only · ranks are rank/peer group · n = attempts · left / right = offense's view">
         <SplitTable splits={m.splits} rb={player.name} dfn={opp} report={report} />
       </Panel>
+
+      <DefenseContext d={d} report={report} season={season} />
 
       {meta.current && report.scheme && <SchemePanel report={report} ps={ps} name={player.name} opp={opp} />}
 

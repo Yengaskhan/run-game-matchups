@@ -231,3 +231,26 @@ def test_pick_export_needs_full_coverage_and_prefers_the_earliest_that_has_it(tm
     # Week 1 is finished: an export that also has week 2's game doesn't fit it.
     one = weeks.filter(pl.col("game_id") != "w3")
     assert "played after them" in datasuite.pick_rushing_export(one, set(), week=1)["status"]
+
+
+def test_team_defense_parses_ranks_and_only_fits_matching_games(tmp_path, monkeypatch):
+    from matchups import datasuite
+
+    names = list(datasuite._team_names().items())
+    head = (",Team Details,Team Details,Team Details,Success,Explosive,Tendencies,Fantasy\n"
+            "Season,Rank,Name,G,RUSH SUCC %,RUSH EXP %,BOX,RB FPG\n"
+            "2026,,League Avg,,45,11,6.9,21\n")
+    body = "".join(f"2026,{i + 1},{full},5,{40 + i * 0.25},10,7.0,{10 + i}\n" for i, (full, _abbr) in enumerate(names))
+    folder = tmp_path / "team_defense"
+    folder.mkdir()
+    f = folder / "2026-10-21T0100Z.csv"
+    f.write_text(head + body + "Exported from Data Suite 2.0 by x on 2026-10-21 01:00 UTC,,\n")
+    td = datasuite.parse_team_defense(f)
+    first, last = names[0][1], names[-1][1]
+    assert td["season"] == 2026 and td["league"]["rush_sr"] == pytest.approx(0.45)
+    assert td["teams"][first]["rb_fpg_rank"] == [1, 32] and td["teams"][last]["rb_fpg_rank"] == [32, 32]  # 1 = allows the least
+    monkeypatch.setattr(datasuite, "IMPORT_DIR", tmp_path)
+    games = {abbr: 5 for _f, abbr in names}
+    assert datasuite.pick_team_defense(2026, games)["file"] == f
+    assert "don't match" in datasuite.pick_team_defense(2026, {**games, first: 6})["status"]  # an extra game: never used
+    assert "No Data Suite team defense export for 2025" in datasuite.pick_team_defense(2025, games)["status"]

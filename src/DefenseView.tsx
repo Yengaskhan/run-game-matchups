@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import { matchup } from './edge';
 import { formatCell } from './format';
 import type { HashState, Update } from './MatchupApp';
-import { GROUP_LABEL, pfrNote, StatStrip } from './parts';
+import { DefenseContext, GROUP_LABEL, pfrNote, StatStrip } from './parts';
 import { TeamLogo, teamName } from './TeamLogo';
 import type { Metrics, PoolDefense, SplitGroup, WeekReport } from './types';
 import { EdgeBadge, Panel, rankPhrase, Select } from './ui';
@@ -62,6 +62,7 @@ export function DefenseView({ report, season, hash, update }: { report: WeekRepo
       </div>
 
       <StatStrip title={`${team} defense allowed`} m={d.overall} kind="defense" note={pfrNote(report, season)} team={team} />
+      <DefenseContext d={d} report={report} season={season} />
 
       <h2 className="text-[11px] font-semibold uppercase tracking-wider text-ink-2">Where offenses run on {team}, and what it allows there (offense's left / right)</h2>
       <div className="grid gap-3 lg:grid-cols-3">

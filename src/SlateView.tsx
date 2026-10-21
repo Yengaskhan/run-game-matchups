@@ -7,7 +7,7 @@ import type { BandKey, MatchupRow, Metrics, SchemeSide, SeasonBlock, WeekReport 
 import { EdgeBadge, RankLine, Select, SortTh, Stat, type SortState } from './ui';
 
 type SplitKey = 'all' | 'left' | 'middle' | 'right' | 'zone' | 'gap';
-type SortKey = 'offense' | 'defense' | 'off_sr' | 'off_ypc' | 'def_sr' | 'def_ypc' | 'share' | 'edge';
+type SortKey = 'offense' | 'defense' | 'off_sr' | 'off_ypc' | 'def_sr' | 'def_ypc' | 'share' | 'rb_fpg' | 'edge';
 const SPLITS: [SplitKey, string][] = [['all', 'All runs'], ['left', 'Left'], ['middle', 'Middle'], ['right', 'Right'], ['zone', 'Zone runs (Data Suite)'], ['gap', 'Man/gap runs (Data Suite)']];
 
 interface Summary {
@@ -27,6 +27,8 @@ export function SlateView({ report, season, hash, update }: { report: WeekReport
   const [sort, setSort] = useState<SortState<SortKey>>({ key: 'edge', desc: true });
   const seasonMeta = report.seasons.find((s) => String(s.season) === season)!;
   const games = useMemo(() => new Map(report.games.map((g) => [g.game_id, g])), [report]);
+  // Data Suite RB points allowed: shown only when a team-defense export matches this season's games.
+  const hasDs = Object.values(report.pool[season]?.defenses ?? {}).some((d) => d.ds);
 
   /** The numbers the table shows for a row: overall, or one direction / run scheme when a split is picked. */
   const summary = (row: MatchupRow): Summary | null => {
@@ -67,6 +69,8 @@ export function SlateView({ report, season, hash, update }: { report: WeekReport
           return x.s?.def?.ypc == null ? null : -x.s.def.ypc;
         case 'share':
           return x.s?.share?.share ?? null;
+        case 'rb_fpg':
+          return report.pool[season]?.defenses[x.r.defense]?.ds?.rb_fpg ?? null;
         case 'edge':
           return x.s?.edge ?? null;
       }
@@ -119,6 +123,11 @@ export function SlateView({ report, season, hash, update }: { report: WeekReport
               <Th k="def_sr" className="text-right">{splitLabel ? `Def Succ. · ${splitLabel}` : 'Def Succ. allowed'}</Th>
               <Th k="def_ypc" className="text-right">{splitLabel ? `Def YPC · ${splitLabel}` : 'Def YPC allowed'}</Th>
               <Th k="share" className="text-right">{splitLabel ? `${splitLabel} share` : 'Main direction'}</Th>
+              {hasDs && (
+                <Th k="rb_fpg" className="text-right">
+                  <span title="Data Suite: fantasy points per game the defense allows to RBs (context, not in the Run Edge)">RB FP/G al.</span>
+                </Th>
+              )}
               <Th k="edge" className="text-center">Run edge</Th>
             </tr>
           </thead>
@@ -172,13 +181,18 @@ export function SlateView({ report, season, hash, update }: { report: WeekReport
                       '—'
                     )}
                   </td>
+                  {hasDs && (
+                    <td className="px-3 py-2 text-right">
+                      <Stat v={report.pool[season]?.defenses[r.defense]?.ds?.rb_fpg} fmt="dec1" rank={report.pool[season]?.defenses[r.defense]?.ds?.ranks.rb_fpg} />
+                    </td>
+                  )}
                   <td className="px-3 py-2 text-center">{s ? <EdgeBadge edge={s.edge} band={s.band} small={s.small} /> : '—'}</td>
                 </tr>
               );
             })}
             {!rows.length && (
               <tr>
-                <td colSpan={8} className="px-3 py-6 text-center text-ink-3">
+                <td colSpan={hasDs ? 9 : 8} className="px-3 py-6 text-center text-ink-3">
                   No team matches "{query}".
                 </td>
               </tr>

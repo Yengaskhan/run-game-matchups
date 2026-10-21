@@ -2,8 +2,8 @@ import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { bandFor } from './edge';
 import { formatCell, formatDate } from './format';
 import { TeamLogo } from './TeamLogo';
-import type { Metrics, Overall, PlayerEntry, Rusher, SchemeRow, Split, WeekReport } from './types';
-import { EdgeBadge, Stat } from './ui';
+import type { Metrics, Overall, PlayerEntry, PoolDefense, Rusher, SchemeRow, Split, WeekReport } from './types';
+import { EdgeBadge, Panel, rankPhrase, Stat } from './ui';
 
 /*
  * Pieces shared by the player and defense pages: the split table, run-scheme table, stat strips,
@@ -322,5 +322,52 @@ export function Footer({ report }: { report: WeekReport }) {
         Generated {report.generated_at.replace('T', ' ').replace('Z', ' UTC')} · data as of {formatDate(report.data_as_of, { month: 'short', day: 'numeric', year: 'numeric' })}. Small samples are noisy; read every rate next to its attempts.
       </p>
     </footer>
+  );
+}
+
+/** Data Suite team-defense context: RB fantasy points, rush success and explosives allowed, box. Not in the Run Edge. */
+export function DefenseContext({ d, report, season }: { d: PoolDefense; report: WeekReport; season: string }) {
+  const meta = report.team_defense?.[season];
+  if (!meta) return null;
+  const exported = meta.exported_at ? formatDate(meta.exported_at.slice(0, 10), { month: 'short', day: 'numeric' }) : null;
+  const lg = meta.league;
+  const ds = d.ds;
+  const tiles: { key: 'rb_fpg' | 'rush_sr' | 'rush_expl' | 'box'; label: string; fmt: (v: number | null | undefined) => string; band: number }[] = [
+    { key: 'rb_fpg', label: 'RB fantasy pts allowed / game', fmt: (v) => formatCell(v, 'dec1'), band: 2 },
+    { key: 'rush_sr', label: 'Rush success allowed', fmt: (v) => formatCell(v, 'pct'), band: 0.03 },
+    { key: 'rush_expl', label: 'Explosive rush rate allowed', fmt: (v) => formatCell(v, 'pct'), band: 0.02 },
+    { key: 'box', label: 'Avg defenders in box', fmt: (v) => (v == null ? '—' : v.toFixed(2)), band: 0.15 },
+  ];
+  return (
+    <Panel title={`${d.team} run defense: Data Suite context`} note={`Data Suite${exported ? ` export of ${exported}` : ''} · all rushes · not part of the Run Edge`}>
+      {!ds ? (
+        <p className="text-[12px] text-ink-2">{meta.status ?? 'Not in the Data Suite export.'}</p>
+      ) : (
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          {tiles.map((t) => {
+            const v = ds[t.key];
+            const l = lg[t.key];
+            // Box: more defenders = a tougher front for the RB; for the rest, allowing more is good for him.
+            const diff = v == null || l == null ? 0 : v - l;
+            const good = t.key === 'box' ? diff < -t.band : diff > t.band;
+            const bad = t.key === 'box' ? diff > t.band : diff < -t.band;
+            const r = t.key === 'box' ? undefined : ds.ranks[t.key];
+            return (
+              <div key={t.key} className="rounded border border-line bg-panel-2/50 px-2.5 py-2">
+                <p className="text-[10.5px] uppercase tracking-wider text-ink-3">{t.label}</p>
+                <p className={`num text-[15px] font-semibold ${good ? 'text-edge-good' : bad ? 'text-edge-bad' : ''}`}>{t.fmt(v)}</p>
+                <p className="num text-[11px] text-ink-3">
+                  lg {t.fmt(l)}
+                  {t.key !== 'box' && ` · ${rankPhrase(r)}`}
+                </p>
+              </div>
+            );
+          })}
+        </div>
+      )}
+      <p className="mt-2 text-[10.5px] text-ink-3">
+        Green = easier for the RB than league average, orange = harder. Ranks: 1 = allows the least. Data Suite counts every rush (QB scrambles included), so its success rate differs a little from the designed-run numbers above.
+      </p>
+    </Panel>
   );
 }

@@ -125,10 +125,21 @@ export interface PoolPlayer {
   scheme?: Record<'zone' | 'gap', SchemeSide> | null;
 }
 
+/** Data Suite team-defense context (display only; not in the Run Edge). Rates are fractions; rank 1 = allows the least. */
+export interface TeamDefenseDS {
+  rb_fpg: number | null;
+  rush_sr: number | null;
+  rush_expl: number | null;
+  box: number | null;
+  ranks: Partial<Record<'rb_fpg' | 'rush_sr' | 'rush_expl', Rank>>;
+}
+
 export interface PoolDefense {
   team: string;
   overall: Overall;
   splits: SplitTables;
+  /** Null when no Data Suite team-defense export matches this season's games. */
+  ds?: TeamDefenseDS | null;
 }
 
 export interface Pool {
@@ -160,6 +171,7 @@ export interface WeekReport {
   buckets: Record<SplitGroup, { key: string; label: string }[]>;
   /** Per season; null when that season has no games in the window. */
   pool: Record<string, Pool | null>;
+  team_defense?: Record<string, { status: string | null; exported_at: string | null; league: Partial<Record<'rb_fpg' | 'rush_sr' | 'rush_expl' | 'box', number | null>> }>;
   edge: { bands: { key: BandKey; label: string; min: number }[]; min_coverage: number; definition: string };
   notes: string[];
   filters: string[];

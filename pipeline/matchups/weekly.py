@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 import polars as pl
 
 from . import fmt
-from .datasuite import DEF_STATUS, qualifier_note, scheme_block, scheme_player
+from .datasuite import DEF_STATUS, qualifier_note, scheme_block, scheme_player, team_defense_block, team_defense_meta
 from .config import BOX_BUCKETS, DIRECTIONS, EDGE, EXPLOSIVE_YARDS, GAPS, QUALIFIERS, SCHEMA_VERSION
 from .metrics import agg_exprs, nan_to_none, pct_from_rank
 from .plays import FILTERS
@@ -162,7 +162,7 @@ def roster(w: LeagueWindow, depth_by_game: dict[str, dict[str, list[dict]]]) -> 
     return out
 
 
-def pool_block(w: LeagueWindow, players: list[dict], scheme_pick: dict | None = None) -> dict | None:
+def pool_block(w: LeagueWindow, players: list[dict], scheme_pick: dict | None = None, td_pick: dict | None = None) -> dict | None:
     """Every listed RB and every defense in one season window, so the page can pair any RB with any
     defense (the Run Edge is recomputed in the browser exactly as edge_from / side_block do here)."""
     if not w.weeks or "off" not in w.tables:
@@ -178,7 +178,11 @@ def pool_block(w: LeagueWindow, players: list[dict], scheme_pick: dict | None = 
     for group, _buckets in GROUPS:
         if group in w.league:
             league[group] = {b: {k: _round(v.get(k)) for k in ("share", "sr", "ypc")} for b, v in w.league[group].items()}
-    return {"players": ps, "defenses": {t: defense_stats(w, t) for t in sorted(w.tables["def"]["team"].to_list())}, "league": league}
+    defenses = {t: defense_stats(w, t) for t in sorted(w.tables["def"]["team"].to_list())}
+    # Data Suite team-defense context (display only, not in the Run Edge): None when no export matches.
+    for t, d in defenses.items():
+        d["ds"] = team_defense_block(td_pick or {}, t)
+    return {"players": ps, "defenses": defenses, "league": league}
 
 
 def rushers_block(w: LeagueWindow, team: str, depth: list[dict]) -> list[dict]:
@@ -248,7 +252,7 @@ def takeaways(name: str, dfn: str, splits: list[dict], att: int, w: LeagueWindow
 
 def week_report(season: int, week: int, games: list[dict], cur: LeagueWindow, prior: LeagueWindow,
                 depth_by_game: dict[str, dict[str, list[dict]]], checks: list[str],
-                scheme_pick: dict | None = None, scheme_note: str | None = None) -> dict:
+                scheme_pick: dict | None = None, scheme_note: str | None = None, td_picks: dict[int, dict] | None = None) -> dict:
     """scheme_pick: the Data Suite rushing export chosen for this week (see datasuite.pick_rushing_export)."""
     scheme_pick = scheme_pick or {"status": "No Data Suite rushing export has been added yet."}
     rows = []
@@ -289,7 +293,9 @@ def week_report(season: int, week: int, games: list[dict], cur: LeagueWindow, pr
         # Player page / defense page: every RB in `players` and every defense, per season (never combined).
         "players": players,
         "buckets": {group: [{"key": k, "label": label} for k, label in buckets] for group, buckets in GROUPS},
-        "pool": {str(cur.season): pool_block(cur, players, scheme_pick), str(prior.season): pool_block(prior, players)},
+        "pool": {str(cur.season): pool_block(cur, players, scheme_pick, (td_picks or {}).get(cur.season)),
+                 str(prior.season): pool_block(prior, players, None, (td_picks or {}).get(prior.season))},
+        "team_defense": {str(sn): team_defense_meta((td_picks or {}).get(sn) or {"status": "No Data Suite team defense export has been added yet."}) for sn in (cur.season, prior.season)},
         "edge": {
             "bands": bands,
             "min_coverage": EDGE["min_coverage"],
@@ -328,6 +334,7 @@ def week_report(season: int, week: int, games: list[dict], cur: LeagueWindow, pr
         "sources": [
             "nflverse play-by-play, schedules, weekly rosters, depth charts, snap counts (nflreadpy)",
             "Data Suite rushing export: each RB's zone vs man/gap concept carries, YPC and success % (run-scheme table only)",
+            "Data Suite team defense export: RB fantasy points, rush success and explosive rate allowed, average box (run-defense context only; not in the Run Edge)",
             "Pro Football Reference advanced rushing via nflverse (load_pfr_advstats, stat_type='rush')",
             "FTN charting via nflverse (load_ftn_charting): box counts and QB sneaks",
         ],
