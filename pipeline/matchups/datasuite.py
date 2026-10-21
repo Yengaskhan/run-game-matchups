@@ -59,7 +59,10 @@ def read_export(path: Path) -> tuple[list[dict], dict | None, datetime, list[str
         if not r or not r[0].strip().isdigit():  # blank lines and the footer
             continue
         d = dict(zip(keys, r))
-        if d.get("Player Details|Name", "").strip() == "League Avg" or not d.get("Player Details|Rank", "").strip():
+        # "Player Details|Name" in player exports, "Team Details|Name" in team exports.
+        name = next((v for k, v in d.items() if k.endswith("|Name")), "").strip()
+        rank = next((v for k, v in d.items() if k.endswith("|Rank")), "").strip()
+        if name == "League Avg" or not rank:
             league = d
         else:
             players.append(d)
@@ -222,3 +225,93 @@ def extra_note(pick: dict, schedule: pl.DataFrame) -> str | None:
 
 def qualifier_note() -> str:
     return f"Run-scheme ranks: RBs with at least {QUALIFIERS['rusher_bucket_att_per_team_game']:g} carries of that type per game played."
+
+
+# ------------------------------------------------------------------------------------------------
+# Team defense export: run-defense context per defense (display only; not part of the Run Edge).
+
+TEAM_MAP = Path(__file__).with_name("team_map.csv")
+# key -> (Data Suite column, label, rank direction: True = lower allowed ranks 1st (stingiest), None = unranked)
+TEAM_DEF_COLS = [
+    ("rb_fpg", "Fantasy|RB FPG", "RB fantasy points allowed per game", True),
+    ("rush_sr", "Success|RUSH SUCC %", "Rush success allowed", True),
+    ("rush_expl", "Explosive|RUSH EXP %", "Explosive rush rate allowed", True),
+    ("box", "Tendencies|BOX", "Average defenders in the box", None),
+]
+
+
+def _team_names() -> dict[str, str]:
+    with TEAM_MAP.open(newline="", encoding="utf-8") as f:
+        return {r["full_name"]: r["nflverse_code"] for r in csv.DictReader(f)}
+
+
+def parse_team_defense(path: Path) -> dict:
+    """{season, exported, teams: {ABBR: {games, rb_fpg, rush_sr, rush_expl, box}}, league: {...}}.
+    Rates are fractions. Ranks are among the 32 defenses, 1 = allows the least."""
+    rows, league, exported, keys = read_export(path)
+    need = ["|Season", "Team Details|Name", "Team Details|G"] + [c for _k, c, _l, _r in TEAM_DEF_COLS]
+    missing = [k for k in need if k not in keys]
+    if missing:
+        raise DataSuiteError(f"{path.name}: missing column {missing[0].replace('|', ' › ').strip(' ›')}. Is this the Data Suite team defense export?")
+    names = _team_names()
+
+    def rec(d: dict) -> dict:
+        out = {}
+        for k, col, _label, _rank in TEAM_DEF_COLS:
+            v = _num(d.get(col, ""))
+            out[k] = None if v is None else (v / 100 if col.endswith("%") else v)
+        return out
+
+    teams, seasons = {}, set()
+    for d in rows:
+        name = d["Team Details|Name"].strip()
+        if name not in names:
+            raise DataSuiteError(f"{path.name}: team {name!r} isn't in {TEAM_MAP.name}")
+        seasons.add(d["|Season"].strip())
+        teams[names[name]] = {"games": int(_num(d["Team Details|G"]) or 0), **rec(d)}
+    if len(teams) != 32 or len(seasons) != 1:
+        raise DataSuiteError(f"{path.name}: expected 32 teams from one season, found {len(teams)} teams, seasons {sorted(seasons)}")
+    for k, _col, _label, low_best in TEAM_DEF_COLS:
+        if low_best is None:
+            continue
+        vals = sorted(t[k] for t in teams.values() if t[k] is not None)
+        for t in teams.values():
+            if t[k] is not None:
+                t[f"{k}_rank"] = [1 + sum(v < t[k] for v in vals), len(vals)]
+    return {"season": int(seasons.pop()), "exported": exported, "teams": teams, "league": rec(league) if league else {}}
+
+
+def pick_team_defense(season: int, team_games: dict[str, int]) -> dict:
+    """The earliest team-defense export for `season` whose games per team equal the report window's for
+    all 32 teams (team totals can't be trimmed, so an export with extra games is never used)."""
+    seen = []
+    for f in exports("team_defense"):
+        td = parse_team_defense(f)
+        if td["season"] != season:
+            continue
+        seen.append(td)
+        if all(td["teams"].get(t, {}).get("games") == g for t, g in team_games.items()) and len(team_games) == 32:
+            return {**td, "file": f}
+    if not seen:
+        return {"status": f"No Data Suite team defense export for {season} has been added yet."}
+    last = seen[-1]
+    off = sum(last["teams"].get(t, {}).get("games") != g for t, g in team_games.items())
+    return {"status": f"The Data Suite team defense exports for {season} don't match this report's games ({off} teams differ in the newest, {last['exported']:%b %d} UTC), so run-defense context isn't shown."}
+
+
+def team_defense_block(pick: dict, team: str) -> dict | None:
+    t = (pick.get("teams") or {}).get(team)
+    if not t:
+        return None
+    out = {k: _r4(t[k]) for k, *_ in TEAM_DEF_COLS}
+    out["ranks"] = {k: t[f"{k}_rank"] for k, *_ in TEAM_DEF_COLS if f"{k}_rank" in t}
+    return out
+
+
+def team_defense_meta(pick: dict) -> dict:
+    return {
+        "status": pick.get("status"),
+        "exported_at": pick["exported"].strftime("%Y-%m-%dT%H:%MZ") if "exported" in pick else None,
+        "league": {k: _r4(v) for k, v in (pick.get("league") or {}).items()},
+        "columns": [{"key": k, "label": label, "ranked": r is not None} for k, _c, label, r in TEAM_DEF_COLS],
+    }

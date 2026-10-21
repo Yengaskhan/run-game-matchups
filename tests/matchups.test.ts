@@ -79,6 +79,10 @@ describe.each(seasons)('matchup reports %s', (season) => {
         expect(pool, `${where} pool`).toBeTruthy();
         if (pool) {
           expect(Object.keys(pool.defenses).length).toBe(32);
+          // Data Suite team-defense context: for all 32 or none, ranks within 1..32.
+          const ds = Object.values(pool.defenses).map((d) => d.ds);
+          expect(ds.every((x) => x) || ds.every((x) => !x), `${where} team defense all or none`).toBe(true);
+          for (const x of ds) for (const [rank, n] of Object.values(x?.ranks ?? {})) expect(rank >= 1 && rank <= n && n === 32).toBe(true);
           const ps = row.starter ? pool.players[row.starter.id] : undefined;
           if (b.overall.off.att > 0) expect(ps?.overall, `${where} pool player`).toEqual(b.overall.off);
           expect(pool.defenses[row.defense].overall).toEqual(b.overall.def);

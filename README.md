@@ -123,6 +123,28 @@ The import step checks the file, reads its export time from the "Exported from D
 
 **Defense side:** the defense columns and a per-scheme Run Edge (from success rate) need a Data Suite run-defense export with the same zone / man-gap concept splits allowed by each defense. Until then those cells read "needs defense export".
 
+## Run-defense context (Data Suite team defense)
+
+The Data Suite **team defense** export (the same file the WR/TE report uses) adds four numbers per defense:
+- RB fantasy points allowed per game
+- rush success allowed
+- explosive rush rate allowed
+- average defenders in the box
+
+**Where they show up:**
+- A "Data Suite context" panel on the player and defense pages.
+- An **RB FP/G al.** column on the slate.
+
+These numbers are context only and are **not** part of the Run Edge. Ranks run 1–32, where 1 = allows the least. Data Suite counts every rush (scrambles included), so its success rate isn't the same as the designed-run numbers.
+
+Add an export with the same import command; the tool recognises a team file by its header:
+
+```bash
+.venv/bin/python pipeline/import_datasuite.py ~/Downloads/team-defense.csv
+```
+
+**Which export a season uses:** the earliest export for that season whose games per team equal the report's window, for all 32 teams. A team total can't be trimmed, so an export with even one extra game is never used; the page shows a note instead. The 2025 full-season export covers the prior-season view for every week.
+
 ## Changing the qualifiers
 
 Every tunable number is in `pipeline/matchups/config.py`. Edit it, then re-run the pipeline:
