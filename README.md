@@ -48,7 +48,7 @@ When embedded, the page shows an "Open full screen ↗" link. The selected game 
 | When (UTC) | What |
 |---|---|
 | Tuesday 10:00 | After Monday Night Football: builds the new week's report from every completed week |
-| Wednesday and Thursday 10:00 | Re-runs, filling in PFR yards before / after contact once PFR has published the last games |
+| Wednesday 10:00 | Safety net: re-runs to fill in PFR yards before / after contact if PFR was late. Commits (and redeploys) only if real data changed, not just the timestamp |
 
 Each run installs the pipeline, runs it, then runs `npm run build`, the same check Netlify runs. If anything changed, it commits the data to `main` and Netlify redeploys. A run with no new data commits nothing.
 

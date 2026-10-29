@@ -3,15 +3,16 @@
 #
 # Schedule (UTC, September through January):
 #   Tue 10:00  after Monday Night Football: builds the new week's report (play-by-play is usually in)
-#   Wed 10:00  and Thu 10:00: fill in PFR yards before / after contact once PFR catches up
-# A run with no new data changes no files, so it makes no commit and no redeploy.
+#   Wed 10:00  safety net: fills in PFR yards before / after contact if PFR was late
+# A run with no new data commits nothing (a file whose only change is its generated_at timestamp is
+# left as it was), so it makes no redeploy. Netlify charges per deploy.
 # Run it by hand any time: GitHub → Actions → "Weekly data refresh" → Run workflow.
 
 name: Weekly data refresh
 
 on:
   schedule:
-    - cron: "0 10 * 9-12,1 2,3,4"
+    - cron: "0 10 * 9-12,1 2,3"
   workflow_dispatch:
     inputs:
       week:
@@ -59,6 +60,7 @@ jobs:
 
       - name: Commit new data
         run: |
+          python pipeline/drop_timestamp_only_changes.py
           git add data src/assets
           if git diff --cached --quiet; then
             echo "No new data."
