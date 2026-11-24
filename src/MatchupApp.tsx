@@ -5,6 +5,7 @@ import { formatDate } from './format';
 import { Footer } from './parts';
 import { PlayerView } from './PlayerView';
 import { SlateView } from './SlateView';
+import { TrackRecordView } from './TrackRecordView';
 import type { WeekReport } from './types';
 import { BAND_STYLE, Select } from './ui';
 
@@ -17,11 +18,12 @@ const embedded = (() => {
   }
 })();
 
-export type Tab = 'slate' | 'player' | 'defense';
+export type Tab = 'slate' | 'player' | 'defense' | 'track';
 const TABS: [Tab, string][] = [
   ['slate', 'Slate Rankings'],
   ['player', 'Player vs Defense'],
   ['defense', 'Defense Profiles'],
+  ['track', 'Track Record'],
 ];
 
 /** The view lives in the URL hash so a link goes straight to it. */
@@ -95,7 +97,7 @@ export default function MatchupApp() {
                 {index.season} Week {week} preview
               </p>
               <h1 className="text-[22px] font-semibold tracking-tight">Run Game Matchup Report</h1>
-              <p className="text-[12px] text-ink-2">Each team's starting RB, on his own carries, against the opponent's run defense, by where he runs.</p>
+              <p className="text-[12px] text-ink-2">Each team's starting RB against the opponent's run defense and this week's game: how much more or less he should rush for than in his normal game.</p>
             </div>
             <div className="flex flex-wrap items-end gap-3">
               <Select label="Week" value={String(week ?? '')} onChange={(v) => update({ week: v })}
@@ -128,11 +130,11 @@ export default function MatchupApp() {
             <div className="mt-4 flex flex-wrap items-center gap-1.5 text-[11px]">
               {report.edge.bands.map((b) => (
                 <span key={b.key} className={`rounded border px-2 py-1 ${BAND_STYLE[b.key]}`}>
-                  {b.key === 'neutral' ? 'Neutral / small sample' : b.label}
+                  {b.label}
                 </span>
               ))}
               <span className="ml-1 text-ink-3">
-                Run Edge 0–100, 50 = even. Data as of {formatDate(report.data_as_of, { month: 'short', day: 'numeric', year: 'numeric' })}. Left / right = the offense's left / right.
+                Run Edge 0–100, 50 = an average matchup. Data as of {formatDate(report.data_as_of, { month: 'short', day: 'numeric', year: 'numeric' })}. Left / right = the offense's left / right.
               </span>
             </div>
             {seasonMeta && !seasonMeta.current && (
@@ -146,6 +148,8 @@ export default function MatchupApp() {
                 <p className="rounded-md border border-line bg-panel px-3 py-3 text-[12.5px] text-ink-2">{seasonMeta.empty}</p>
               ) : tab === 'player' ? (
                 <PlayerView report={report} season={season} hash={hash} update={update} />
+              ) : tab === 'track' ? (
+                <TrackRecordView />
               ) : tab === 'defense' ? (
                 <DefenseView report={report} season={season} hash={hash} update={update} />
               ) : (

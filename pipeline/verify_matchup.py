@@ -118,12 +118,11 @@ def main(game_id: str) -> int:
         p = pfr[(pfr.opponent == dfn) & ~pfr.is_qb]
         check(f"{dfn} YBC/att allowed (PFR, non-QB)", p.rushing_yards_before_contact.sum() / p.carries.sum(), b["overall"]["def"]["ybc_att"])
 
-        # Direction shares (offense perspective), then the Run Edge from independent ranks.
+        # Direction shares (offense perspective): context numbers.
         mine_dir = mine[mine.run_location.notna()]
         rb_shares = mine_dir.run_location.value_counts(normalize=True)
         dd = runs[(runs.defteam == dfn) & runs.run_location.notna()]
         def_shares = dd.run_location.value_counts(normalize=True)
-        edges = {}
         for loc in ["left", "middle", "right"]:
             sp = splits[("direction", loc)]
             sub = mine_dir[mine_dir.run_location == loc]
@@ -131,15 +130,29 @@ def main(game_id: str) -> int:
             check(f"{name} {loc} success", sub.success.mean() if len(sub) else None, sp["off"]["sr"])
             check(f"{name} {loc} YPC", sub.yards.mean() if len(sub) else None, sp["off"]["ypc"])
             check(f"{dfn} defense {loc} share", def_shares.get(loc, 0.0), sp["def"]["share"])
-            # Edge: average of the success-rate and YPC percentiles on each side.
-            o_r = [rb_rank(pid, off, loc, per_game=2.0, metric=m) for m in ("success", "yards")]
-            d_r = [def_rank(dfn, loc, metric=m) for m in ("success", "yards")]
-            ok = all(o_r) and all(d_r)
-            edges[loc] = round(50 + 50 * (sum(x[2] for x in o_r) / 2 - sum(x[2] for x in d_r) / 2)) if ok else None
-            check(f"{name} vs {dfn} {loc} edge", edges[loc], sp["edge"], 0)
-        cov = sum(rb_shares.get(x, 0.0) for x in edges if edges[x] is not None)
-        run_edge = round(sum(edges[x] * rb_shares.get(x, 0.0) for x in edges if edges[x] is not None) / cov) if cov else None
-        check(f"{name} vs {dfn} Run Edge", run_edge, b["run_edge"], 0)
+
+        # Run Edge, recomputed from scratch: defense rates allowed vs league (shrunk by games), Vegas line vs
+        # the team's earlier lines (nflverse schedule), weights from config.MODEL.
+        from matchups.config import MODEL
+        dg = games_played[dfn]
+        shrink = lambda idx: 1 + dg / (dg + MODEL["k_games"]) * (idx - 1)  # noqa: E731
+        d_all = runs[runs.defteam == dfn]
+        sr_idx = shrink(round(d_all.success.mean(), 4) / round(runs.success.mean(), 4))
+        ypc_idx = shrink(round(d_all.yards.mean(), 4) / round(runs.yards.mean(), 4))
+        sch = nfl.load_schedules([season]).to_pandas()
+        sch = sch[(sch.game_type == "REG") & sch.total_line.notna() & sch.spread_line.notna()]
+        imp = pd.concat([sch.assign(team=sch.home_team, imp=(sch.total_line + sch.spread_line) / 2), sch.assign(team=sch.away_team, imp=(sch.total_line - sch.spread_line) / 2)])
+        this = imp[(imp.game_id == game_id) & (imp.team == off)].imp.iloc[0]
+        prev = imp[(imp.team == off) & (imp.week < rep["week"])].imp
+        veg = this / round(prev.mean(), 4) if len(prev) >= MODEL["vegas_min_games"] else 1.0
+        mult = math.exp(MODEL["w_sr"] * math.log(sr_idx) + MODEL["w_ypc"] * math.log(ypc_idx) + MODEL["w_vegas"] * math.log(veg))
+        check(f"{off} Vegas implied total {this:.2f} vs usual {prev.mean():.2f}", veg, b["model"]["vegas_idx"])
+        check(f"{dfn} run-defense index (success)", sr_idx, b["model"]["sr_idx"])
+        check(f"{dfn} run-defense index (YPC)", ypc_idx, b["model"]["ypc_idx"])
+        check(f"{name} vs {dfn} expected change", mult - 1, b["model"]["mult"] - 1)
+        check(f"{name} vs {dfn} Run Edge", round(50 + 50 * math.tanh(math.log(mult) / MODEL["scale"])), b["run_edge"], 0)
+        base = mine.yards.sum() / b["overall"]["off"]["games"]
+        check(f"{name} matchup-adjusted rushing yards", base * mult, b["model"]["proj_yds"], 0.05)
 
         # The player / defense pool (player and defense pages) carries the same numbers as the row.
         pool = rep["pool"][str(season)]

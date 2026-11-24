@@ -143,8 +143,8 @@ def exports(kind: str) -> list[Path]:
 
 def pick_rushing_export(schedule: pl.DataFrame, window_games: set[str], week: int | None = None) -> dict:
     """The earliest rushing export that covers every game in the window, or a status explaining why none fits.
-    Games beyond the window are allowed only while the report's week is still being played and only from
-    that week (its Thursday game, when the export was taken before Sunday); never for a finished week."""
+    Games beyond the window are allowed only from the report's own week, and only if the export was taken
+    before the rest of that week kicked off (its Thursday game, when the export was taken before Sunday)."""
     files = exports("rushing")
     if not files:
         return {"status": "No Data Suite rushing export has been added yet."}
@@ -156,12 +156,13 @@ def pick_rushing_export(schedule: pl.DataFrame, window_games: set[str], week: in
         if window_games <= cov:
             extra = sorted(cov - window_games)
             if extra and week is not None:
-                # Extra games are tolerated only while this week is still being played (an export taken
-                # after its Thursday game, before Sunday). A finished week would include its own games.
+                # Extra games are tolerated only from this report's own week (its Thursday game, say), and only
+                # when the export was taken before every other game of that week kicked off: then it holds no
+                # half-played game and nothing from later weeks. Rebuilding an old week later still picks it.
                 wk = schedule.filter(pl.col("week") == week)
-                in_progress = wk.height > 0 and wk["result"].is_null().any()
                 later = schedule.filter(pl.col("game_id").is_in(extra), pl.col("week") != week).height
-                if not in_progress or later:
+                rest = [kickoff_utc(r["gameday"], r["gametime"]) for r in wk.iter_rows(named=True) if r["game_id"] not in cov]
+                if later or any(k <= exported for k in rest):
                     return {"status": f"The Data Suite exports that cover this report's weeks also include {len(extra)} game{'s' if len(extra) != 1 else ''} "
                                       "played after them, so run-scheme splits aren't shown for this week."}
             return {"file": f, "df": df, "league": lg, "exported": exported, "extra": extra}

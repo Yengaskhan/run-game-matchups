@@ -15,6 +15,8 @@ export interface Metrics {
 
 export interface Overall extends Metrics {
   games: number | null;
+  /** Rushing yards on designed runs (RB side; the projection's "normal game" is yds / games). */
+  yds?: number | null;
   /** RB side only: his share of the team's designed runs and of its offensive snaps (current season). */
   carry_share?: number | null;
   snap_share?: number | null;
@@ -92,15 +94,36 @@ export interface SeasonBlock {
   subject: { kind: 'rb'; id: string | null; name: string; team: string; teams: string | null };
   overall: { off: Overall; def: Overall };
   run_edge: number | null;
-  edge_coverage: number;
+  /** True when he has too few carries for his normal game to mean much (the score itself is about the matchup). */
   small_sample: boolean;
   band: BandKey;
+  model: RunModel;
   top_direction: { key: string; label: string; share: number; att: number } | null;
   splits: Split[];
   rushers: Rusher[];
   takeaways: string[];
   /** Current season only. */
   scheme?: Scheme;
+}
+
+/** This week's Vegas line for the offense: implied team total, and its average over earlier weeks. */
+export interface Vegas {
+  implied: number | null;
+  avg: number | null;
+  n: number;
+}
+
+/** The Run Edge's inputs and result (pipeline/matchups/model.py). Indexes: 1.00 = league average / usual. */
+export interface RunModel {
+  sr_idx: number;
+  ypc_idx: number;
+  vegas_idx: number;
+  mult: number;
+  run_edge: number;
+  band: BandKey;
+  vegas: Vegas | null;
+  base_ypg: number | null;
+  proj_yds: number | null;
 }
 
 export interface MatchupRow {
@@ -172,7 +195,11 @@ export interface WeekReport {
   /** Per season; null when that season has no games in the window. */
   pool: Record<string, Pool | null>;
   team_defense?: Record<string, { status: string | null; exported_at: string | null; league: Partial<Record<'rb_fpg' | 'rush_sr' | 'rush_expl' | 'box', number | null>> }>;
-  edge: { bands: { key: BandKey; label: string; min: number }[]; min_coverage: number; definition: string };
+  edge: {
+    bands: { key: BandKey; label: string; min: number }[];
+    model: { k_games: number; w_sr: number; w_ypc: number; w_vegas: number; vegas_min_games: number; scale: number; min_att: number };
+    definition: string;
+  };
   notes: string[];
   filters: string[];
   qualifiers: string[];
@@ -185,4 +212,25 @@ export interface SeasonIndex {
   schema: number;
   season: number;
   weeks: { week: number; games: number; first_gameday: string; last_gameday: string; path: string; data_as_of: string | null }[];
+}
+
+/** data/backtest/run-edge.json (pipeline/backtest.py). */
+export interface BacktestPart {
+  label?: string;
+  n: number;
+  rho: number | null;
+  rho_old: number | null;
+  n_old: number;
+  bands: { key: BandKey; label: string; n: number; actual: number | null; pred: number | null }[];
+  fifths: { n: number; actual: number | null; pred: number | null }[];
+}
+
+export interface Backtest {
+  generated_at: string;
+  model: WeekReport['edge']['model'];
+  refit_train: { w_sr: number; w_ypc: number; w_vegas: number; n: number };
+  method: string[];
+  train: BacktestPart;
+  test: BacktestPart;
+  seasons: Record<string, BacktestPart>;
 }

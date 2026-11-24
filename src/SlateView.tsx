@@ -1,5 +1,5 @@
 import { useMemo, useState, type ReactNode } from 'react';
-import { bandFor } from './edge';
+import { changeText } from './edge';
 import { formatCell, formatDate, formatKickoff } from './format';
 import type { HashState, Update } from './MatchupApp';
 import { TeamLogo, teamName } from './TeamLogo';
@@ -7,7 +7,7 @@ import type { BandKey, MatchupRow, Metrics, SchemeSide, SeasonBlock, WeekReport 
 import { EdgeBadge, RankLine, Select, SortTh, Stat, type SortState } from './ui';
 
 type SplitKey = 'all' | 'left' | 'middle' | 'right' | 'zone' | 'gap';
-type SortKey = 'offense' | 'defense' | 'off_sr' | 'off_ypc' | 'def_sr' | 'def_ypc' | 'share' | 'rb_fpg' | 'edge';
+type SortKey = 'offense' | 'defense' | 'off_sr' | 'off_ypc' | 'def_sr' | 'def_ypc' | 'share' | 'rb_fpg' | 'proj' | 'edge';
 const SPLITS: [SplitKey, string][] = [['all', 'All runs'], ['left', 'Left'], ['middle', 'Middle'], ['right', 'Right'], ['zone', 'Zone runs (Data Suite)'], ['gap', 'Man/gap runs (Data Suite)']];
 
 interface Summary {
@@ -40,11 +40,13 @@ export function SlateView({ report, season, hash, update }: { report: WeekReport
       const sc = b.scheme?.rows.find((x) => x.key === split);
       if (!sc) return null;
       const side = (x: SchemeSide | null) => x && { att: x.att, sr: x.sr, ypc: x.ypc, ranks: x.ranks };
-      return { b, off: side(sc.off), def: side(sc.def), share: { label: sc.label, share: sc.off.share ?? 0, att: sc.off.att }, edge: sc.edge, small: false, band: bandFor(sc.edge, report.edge.bands) };
+      return { b, off: side(sc.off), def: side(sc.def), share: { label: sc.label, share: sc.off.share ?? 0, att: sc.off.att }, edge: b.run_edge, small: b.small_sample, band: b.band };
     }
     const s = b.splits.find((x) => x.group === 'direction' && x.key === split);
     if (!s) return null;
-    return { b, off: s.off, def: s.def, share: { label: s.label, share: s.off.share ?? 0, att: s.off.att }, edge: s.edge, small: false, band: bandFor(s.edge, report.edge.bands) };
+    // Splits change the numbers shown, not the Run Edge: it's always the whole matchup (the backtest found
+    // no extra signal in direction or scheme splits).
+    return { b, off: s.off, def: s.def, share: { label: s.label, share: s.off.share ?? 0, att: s.off.att }, edge: b.run_edge, small: b.small_sample, band: b.band };
   };
 
   const rows = useMemo(() => {
@@ -71,6 +73,8 @@ export function SlateView({ report, season, hash, update }: { report: WeekReport
           return x.s?.share?.share ?? null;
         case 'rb_fpg':
           return report.pool[season]?.defenses[x.r.defense]?.ds?.rb_fpg ?? null;
+        case 'proj':
+          return x.s?.b.model.proj_yds ?? null;
         case 'edge':
           return x.s?.edge ?? null;
       }
@@ -107,7 +111,7 @@ export function SlateView({ report, season, hash, update }: { report: WeekReport
             ? 'These splits are current season only; switch Season data back to see them.'
             : !report.scheme
               ? 'This week was built before run-scheme splits were added, so there are none for it.'
-              : (report.scheme.status ?? `Each RB's success rate and YPC on ${split === 'zone' ? 'zone' : 'man/gap'} runs, ranked among RBs. The defense side and Run Edge fill in once a Data Suite run-defense export is added.`)}
+              : (report.scheme.status ?? `Each RB's success rate and YPC on ${split === 'zone' ? 'zone' : 'man/gap'} runs, ranked among RBs. The defense side fills in once a Data Suite run-defense export is added. The Run Edge column is the whole matchup.`)}
           {report.scheme?.note && seasonMeta.current && <span className="block text-ink-3">{report.scheme.note}</span>}
         </p>
       )}
@@ -128,6 +132,9 @@ export function SlateView({ report, season, hash, update }: { report: WeekReport
                   <span title="Data Suite: fantasy points per game the defense allows to RBs (context, not in the Run Edge)">RB FP/G al.</span>
                 </Th>
               )}
+              <Th k="proj" className="text-right">
+                <span title="His normal game (rushing yards on designed runs per game) × this matchup">Proj. rush yds</span>
+              </Th>
               <Th k="edge" className="text-center">Run edge</Th>
             </tr>
           </thead>
@@ -186,13 +193,25 @@ export function SlateView({ report, season, hash, update }: { report: WeekReport
                       <Stat v={report.pool[season]?.defenses[r.defense]?.ds?.rb_fpg} fmt="dec1" rank={report.pool[season]?.defenses[r.defense]?.ds?.ranks.rb_fpg} />
                     </td>
                   )}
+                  <td className="px-3 py-2 text-right">
+                    {s?.b.model.proj_yds != null ? (
+                      <>
+                        <span className="block">{formatCell(s.b.model.proj_yds, 'dec1')}</span>
+                        <span className="block text-[10.5px] leading-3 text-ink-3" title="Expected change vs his normal game">
+                          {changeText(s.b.model.mult)} vs {formatCell(s.b.model.base_ypg, 'dec1')}
+                        </span>
+                      </>
+                    ) : (
+                      '—'
+                    )}
+                  </td>
                   <td className="px-3 py-2 text-center">{s ? <EdgeBadge edge={s.edge} band={s.band} small={s.small} /> : '—'}</td>
                 </tr>
               );
             })}
             {!rows.length && (
               <tr>
-                <td colSpan={hasDs ? 9 : 8} className="px-3 py-6 text-center text-ink-3">
+                <td colSpan={hasDs ? 10 : 9} className="px-3 py-6 text-center text-ink-3">
                   No team matches "{query}".
                 </td>
               </tr>

@@ -47,6 +47,11 @@ jobs:
         # Stops (and the job fails, which GitHub emails you about) if any validation check fails.
         run: python pipeline/run_matchups.py ${{ inputs.week && format('--week {0}', inputs.week) || '' }}
 
+      - name: Update the Run Edge track record
+        # Re-scores every finished week (2023 on) from earlier games only and compares with real results;
+        # the Track Record tab reads data/backtest/run-edge.json. Weights stay as set in config.MODEL.
+        run: python pipeline/backtest.py
+
       - uses: actions/setup-node@v4
         with:
           node-version: "22"

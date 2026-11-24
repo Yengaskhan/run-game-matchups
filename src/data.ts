@@ -1,4 +1,4 @@
-import type { SeasonIndex, WeekReport } from './types';
+import type { Backtest, SeasonIndex, WeekReport } from './types';
 
 /*
  * Reports are precomputed by pipeline/run_matchups.py and committed under data/. They are bundled at
@@ -25,4 +25,11 @@ export function defaultWeek(index: SeasonIndex, today = new Date()): number | nu
   const iso = today.toISOString().slice(0, 10);
   const next = index.weeks.find((w) => (w.last_gameday ?? w.first_gameday) >= iso);
   return (next ?? index.weeks[index.weeks.length - 1])?.week ?? null;
+}
+
+const backtests = import.meta.glob('/data/backtest/run-edge.json', { eager: true, import: 'default' }) as Record<string, Backtest>;
+
+/** The Run Edge walk-forward backtest (pipeline/backtest.py), or null before it has been run. */
+export function loadBacktest(): Backtest | null {
+  return Object.values(backtests)[0] ?? null;
 }

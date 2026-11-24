@@ -69,10 +69,10 @@ describe.each(seasons)('matchup reports %s', (season) => {
           if (s.edge != null) expect(s.edge >= 0 && s.edge <= 100, `${where} ${s.key} edge`).toBe(true);
           for (const m of [s.off, s.def]) for (const [rank, n] of Object.values(m.ranks)) expect(rank >= 1 && rank <= n, `${where} ${s.key} rank`).toBe(true);
         }
-        if (b.run_edge != null) expect(b.run_edge >= 0 && b.run_edge <= 100).toBe(true);
+        expect(b.run_edge! >= 0 && b.run_edge! <= 100).toBe(true);
         const total = b.rushers.find((x) => x.kind === 'total');
         if (total) expect(b.rushers.filter((x) => x.kind !== 'total').reduce((a, x) => a + x.att, 0), `${where} rushers vs total`).toBe(total.att);
-        expect(b.takeaways.length).toBeLessThanOrEqual(2);
+        expect(b.takeaways.length).toBeLessThanOrEqual(3);
         // The player / defense pages score any RB vs any defense in the browser (src/edge.ts). Here they
         // must reproduce the pipeline's own edge for every scheduled matchup, split by split.
         const pool = r.pool[String(meta.season)];
@@ -86,11 +86,15 @@ describe.each(seasons)('matchup reports %s', (season) => {
           const ps = row.starter ? pool.players[row.starter.id] : undefined;
           if (b.overall.off.att > 0) expect(ps?.overall, `${where} pool player`).toEqual(b.overall.off);
           expect(pool.defenses[row.defense].overall).toEqual(b.overall.def);
-          const m = matchup(ps, pool.defenses[row.defense], r);
+          const m = matchup(ps, pool.defenses[row.defense], r, pool.league.overall, b.model.vegas);
           expect(m.run_edge, `${where} run edge`).toBe(b.run_edge);
-          expect(m.small, `${where} small sample`).toBe(b.small_sample);
           expect(m.band, `${where} band`).toBe(b.band);
-          expect(m.splits.map((s) => [s.group, s.key, s.edge]), `${where} split edges`).toEqual(b.splits.map((s) => [s.group, s.key, s.edge]));
+          expect(m.small, `${where} small sample`).toBe(b.small_sample);
+          expect(Math.abs(m.mult - b.model.mult), `${where} multiplier`).toBeLessThan(1e-4);
+          if (b.model.proj_yds != null) expect(Math.abs(m.proj_yds! - b.model.proj_yds), `${where} projection`).toBeLessThan(TOL);
+          // Splits are context: same numbers as the row, no per-split edge.
+          expect(m.splits.map((s) => [s.group, s.key, s.off.att, s.def.att])).toEqual(b.splits.map((s) => [s.group, s.key, s.off.att, s.def.att]));
+          expect(b.splits.every((s) => s.edge === null)).toBe(true);
         }
         // Run scheme (Data Suite): current season only; shares can't exceed 100%; ranks within peer group.
         if (b.scheme) {

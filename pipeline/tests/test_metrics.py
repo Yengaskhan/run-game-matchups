@@ -113,21 +113,31 @@ def test_check_report_catches_bad_shares_and_totals():
         check_report(rep([0.5, 0.5], [3, 2], 6))
 
 
-def test_edge_formula_and_bands():
-    from matchups.weekly import band, edge_from
+def test_run_edge_model_scale_shrinkage_and_vegas():
+    from matchups import model
+    from matchups.config import MODEL
 
-    r = lambda sr, ypc: {"ranks": {"sr": sr, "ypc": ypc}}  # noqa: E731
-    best, worst, mid = r([1, 32], [1, 32]), r([32, 32], [32, 32]), r([16, 31], [16, 31])
-    assert edge_from(best, worst) == 100  # best RB vs the leakiest defense, on both success rate and YPC
-    assert edge_from(worst, best) == 0
-    assert edge_from(mid, mid) == 50
-    # Success-rate and YPC percentiles are averaged: 1st and 32nd of 32 is the middle.
-    assert edge_from(r([1, 32], [32, 32]), mid) == 50
-    assert edge_from(best, {"ranks": {"sr": [1, 32]}}) is None  # a side missing a metric's rank gives no edge
-    assert edge_from({"ranks": {"epa": [1, 32]}}, worst) is None  # EPA plays no part
-    assert [band(x) for x in (70, 69, 58, 57, 43, 42, 31, 30)] == [
+    assert [model.score(m) for m in (1.0, 1.05, 1.10, 0.95)] == [50, 66, 79, 33]  # fixed scale, not a ranking
+    assert model.def_index(0.5, 0.4, 3) == 1 + 3 / (3 + MODEL["k_games"]) * 0.25  # shrunk toward 1.00 by games
+    assert model.def_index(None, 0.4, 3) == 1.0 and model.def_index(0.5, 0.4, 0) == 1.0
+    assert model.vegas_index(25, 20, MODEL["vegas_min_games"]) == 1.25
+    assert model.vegas_index(25, 20, MODEL["vegas_min_games"] - 1) == 1.0  # too few lined games: neutral
+    avg = model.matchup({"sr": 0.4, "ypc": 4.2, "games": 6}, {"sr": 0.4, "ypc": 4.2}, None)
+    assert avg["run_edge"] == 50 and avg["mult"] == 1.0  # a league-average defense, no line: exactly neutral
+    leaky = model.matchup({"sr": 0.48, "ypc": 5.0, "games": 6}, {"sr": 0.4, "ypc": 4.2}, {"implied": 27.0, "avg": 23.0, "n": 5})
+    assert leaky["run_edge"] > 70 and leaky["band"] == "big_edge"
+    assert [model.band(x) for x in (70, 69, 58, 57, 43, 42, 31, 30)] == [
         "big_edge", "small_edge", "small_edge", "neutral", "neutral", "small_disadvantage", "small_disadvantage", "big_disadvantage"]
-    assert band(90, small_sample=True) == "neutral" and band(None) == "neutral"
+
+
+def test_vegas_table_uses_earlier_weeks_only():
+    from matchups import model
+
+    sched = pl.DataFrame({"game_type": ["REG"] * 4, "week": [1, 2, 3, 4], "home_team": ["A", "B", "A", "A"], "away_team": ["B", "A", "C", "B"],
+                          "total_line": [40.0, 44.0, 50.0, 46.0], "spread_line": [2.0, -4.0, 6.0, 3.0]})
+    v = model.vegas_table(sched, 4)
+    assert v["A"] == {"implied": 24.5, "avg": round((21 + 24 + 28) / 3, 4), "n": 3}  # home implied = (total + spread) / 2
+    assert v["B"]["implied"] == 21.5 and v["B"]["n"] == 2
 
 
 def test_pfr_complete_weeks_stops_at_first_incomplete_week():
@@ -228,9 +238,15 @@ def test_pick_export_needs_full_coverage_and_prefers_the_earliest_that_has_it(tm
     # first game (w2), that's still fine for the week 2 report (window = week 1).
     (folder / "2026-10-08T1200Z.csv").unlink()
     assert datasuite.pick_rushing_export(weeks, {"w1"}, week=2)["extra"] == ["w2"]
-    # Week 1 is finished: an export that also has week 2's game doesn't fit it.
+    # Week 1's report: an export that also has week 2's game doesn't fit it.
     one = weeks.filter(pl.col("game_id") != "w3")
     assert "played after them" in datasuite.pick_rushing_export(one, set(), week=1)["status"]
+    # Week 2 finished since: the Oct 13 export still fits week 2 (taken before w3 kicked off on Oct 18)...
+    played = weeks.with_columns(pl.Series("result", [3, 7, 10]))
+    assert datasuite.pick_rushing_export(played, {"w1"}, week=2)["extra"] == ["w2"]
+    # ...but not if another week 2 game had kicked off (and was half-played) when it was taken.
+    early = played.with_columns(pl.Series("gameday", ["2026-10-04", "2026-10-11", "2026-10-13"]), pl.Series("gametime", ["13:00", "13:00", "06:00"]))
+    assert "played after them" in datasuite.pick_rushing_export(early, {"w1"}, week=2)["status"]
 
 
 def test_team_defense_parses_ranks_and_only_fits_matching_games(tmp_path, monkeypatch):
