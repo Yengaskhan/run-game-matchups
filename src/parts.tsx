@@ -1,9 +1,8 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
-import { bandFor } from './edge';
 import { formatCell, formatDate } from './format';
 import { TeamLogo } from './TeamLogo';
 import type { Metrics, Overall, PlayerEntry, PoolDefense, Rusher, SchemeRow, Split, WeekReport } from './types';
-import { EdgeBadge, Panel, rankPhrase, Stat } from './ui';
+import { Panel, rankPhrase, Stat } from './ui';
 
 /*
  * Pieces shared by the player and defense pages: the split table, run-scheme table, stat strips,
@@ -13,7 +12,7 @@ import { EdgeBadge, Panel, rankPhrase, Stat } from './ui';
 export const GROUP_LABEL: Record<Split['group'], string> = { direction: 'Direction', gap: 'Gap', box: 'Box count (FTN)' };
 
 /** RB vs defense, split by split: his own carries on the left, the defense's allowed on the right. */
-export function SplitTable({ splits, rb, dfn, report }: { splits: Split[]; rb: string; dfn: string; report: WeekReport }) {
+export function SplitTable({ splits, rb, dfn }: { splits: Split[]; rb: string; dfn: string }) {
   return (
     <div className="overflow-x-auto rounded border border-line">
       <table className="num w-full min-w-[820px] border-collapse text-[12px]">
@@ -22,7 +21,6 @@ export function SplitTable({ splits, rb, dfn, report }: { splits: Split[]; rb: s
             <th rowSpan={2} className="sticky left-0 z-10 bg-panel-2 px-3 py-1.5 text-left font-medium">Split</th>
             <th colSpan={4} className="border-l border-line px-2 py-1.5 font-medium text-ink-2" title="His own carries only; ranks are among RBs">{rb}</th>
             <th colSpan={4} className="border-l border-line px-2 py-1.5 font-medium text-ink-2">{dfn} defense</th>
-            <th rowSpan={2} className="border-l border-line px-2 py-1.5 font-medium" title={report.edge.definition}>Edge</th>
           </tr>
           <tr className="text-right">
             {['Att', 'Share', 'Success', 'YPC', 'Faced', 'Share', 'Succ. al.', 'YPC al.'].map((h, i) => (
@@ -37,7 +35,7 @@ export function SplitTable({ splits, rb, dfn, report }: { splits: Split[]; rb: s
             return (
               <Fragment key={grp}>
                 <tr className="border-t border-line bg-panel-2/40">
-                  <th colSpan={10} scope="rowgroup" className="sticky left-0 px-3 py-1 text-left text-[10.5px] font-semibold uppercase tracking-wider text-ink-3">
+                  <th colSpan={9} scope="rowgroup" className="sticky left-0 px-3 py-1 text-left text-[10.5px] font-semibold uppercase tracking-wider text-ink-3">
                     {GROUP_LABEL[grp]}
                   </th>
                 </tr>
@@ -46,9 +44,6 @@ export function SplitTable({ splits, rb, dfn, report }: { splits: Split[]; rb: s
                     <th scope="row" className="sticky left-0 z-10 bg-panel px-3 py-1.5 text-left font-medium">{s.label}</th>
                     <SplitCells m={s.off} />
                     <SplitCells m={s.def} />
-                    <td className="border-l border-line px-2 py-1.5 text-center">
-                      <EdgeBadge edge={s.edge} band={bandFor(s.edge, report.edge.bands)} />
-                    </td>
                   </tr>
                 ))}
               </Fragment>
@@ -76,7 +71,7 @@ function SplitCells({ m }: { m: Metrics }) {
 }
 
 /** Zone vs man/gap (Data Suite). The defense side stays blank until a run-defense export is added. */
-export function SchemeTable({ rows, rb, dfn, report }: { rows: SchemeRow[]; rb: string; dfn: string; report: WeekReport }) {
+export function SchemeTable({ rows, rb, dfn }: { rows: SchemeRow[]; rb: string; dfn: string }) {
   return (
     <div className="overflow-x-auto rounded border border-line">
       <table className="num w-full min-w-[640px] border-collapse text-[12px]">
@@ -86,7 +81,6 @@ export function SchemeTable({ rows, rb, dfn, report }: { rows: SchemeRow[]; rb: 
             <th colSpan={4} className="border-l border-line px-2 py-1.5 font-medium text-ink-2">{rb}</th>
             <th rowSpan={2} className="border-l border-line px-2 py-1.5 font-medium" title="League-average success rate on this run type (Data Suite)">Lg succ.</th>
             <th colSpan={2} className="border-l border-line px-2 py-1.5 font-medium text-ink-2">{dfn} defense</th>
-            <th rowSpan={2} className="border-l border-line px-2 py-1.5 font-medium" title={report.edge.definition}>Edge</th>
           </tr>
           <tr className="text-right">
             {['Att', 'Share', 'Success', 'YPC', 'Succ. al.', 'YPC al.'].map((h, i) => (
@@ -111,9 +105,6 @@ export function SchemeTable({ rows, rb, dfn, report }: { rows: SchemeRow[]; rb: 
               ) : (
                 <td colSpan={2} className="border-l border-line px-2 py-1.5 text-center text-[11px] text-ink-3">needs defense export</td>
               )}
-              <td className="border-l border-line px-2 py-1.5 text-center">
-                <EdgeBadge edge={r.edge} band={bandFor(r.edge, report.edge.bands)} />
-              </td>
             </tr>
           ))}
         </tbody>
@@ -309,7 +300,7 @@ export function Footer({ report }: { report: WeekReport }) {
       <details>
         <summary className="cursor-pointer text-[12px] text-ink-2 hover:text-ink">How to read this · data, filters and qualifiers</summary>
         <div className="mt-3 grid gap-4 md:grid-cols-2">
-          {block('Run Edge', [report.edge.definition, ...report.edge.bands.map((b) => `${b.label}: ${b.min}+`), 'The player page scores any RB against any defense the same way, from the same numbers.'])}
+          {block('Run Edge', [report.edge.definition, ...report.edge.bands.map((b) => `${b.label}: ${b.min}+`), 'The player page scores any RB against any defense the same way, from the same numbers (no Vegas line unless it is this week’s game).'])}
           {block('Notes', report.notes)}
           {block('Filters (designed runs)', report.filters)}
           {block('Rank qualifiers', report.qualifiers)}

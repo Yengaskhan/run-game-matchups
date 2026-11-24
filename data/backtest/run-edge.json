@@ -1,0 +1,449 @@
+{
+ "generated_at": "2026-11-24T23:17Z",
+ "model": {
+  "k_games": 3,
+  "w_sr": 0.51,
+  "w_ypc": 0.48,
+  "w_vegas": 0.35,
+  "vegas_min_games": 3,
+  "scale": 0.145,
+  "min_att": 25
+ },
+ "refit_train": {
+  "w_sr": 0.51,
+  "w_ypc": 0.48,
+  "w_vegas": 0.35,
+  "n": 1180
+ },
+ "method": [
+  "Every regular-season week from 4 on, 2023\u20132026, scored from earlier games only (nflverse play-by-play and schedule lines).",
+  "Each team's lead back: the non-QB with the most designed runs for that team in earlier weeks (25+). Games he missed are left out.",
+  "Result: his rushing yards on designed runs that week \u00f7 his yards per game in earlier weeks, minus 1 (capped at +300%).",
+  "Weights fitted on 2023\u20132025; 2026+ is the out-of-sample check.",
+  "Rank correlation (\u03c1): 0 = no better than chance, 1 = perfect order. One game is noisy; even good inputs reach about 0.15\u20130.20."
+ ],
+ "train": {
+  "label": "2023\u20132025 (fitted)",
+  "n": 1180,
+  "rho": 0.159,
+  "rho_old": 0.023,
+  "n_old": 1178,
+  "bands": [
+   {
+    "key": "big_edge",
+    "label": "Big edge",
+    "n": 274,
+    "actual": 0.1781,
+    "pred": 0.1185
+   },
+   {
+    "key": "small_edge",
+    "label": "Small edge",
+    "n": 169,
+    "actual": 0.0002,
+    "pred": 0.0401
+   },
+   {
+    "key": "neutral",
+    "label": "Neutral",
+    "n": 213,
+    "actual": 0.0438,
+    "pred": -0.0006
+   },
+   {
+    "key": "small_disadvantage",
+    "label": "Small disadvantage",
+    "n": 165,
+    "actual": -0.0503,
+    "pred": -0.0386
+   },
+   {
+    "key": "big_disadvantage",
+    "label": "Big disadvantage",
+    "n": 359,
+    "actual": -0.0936,
+    "pred": -0.1155
+   }
+  ],
+  "fifths": [
+   {
+    "n": 236,
+    "actual": -0.1098,
+    "pred": -0.1379
+   },
+   {
+    "n": 236,
+    "actual": -0.0524,
+    "pred": -0.0588
+   },
+   {
+    "n": 236,
+    "actual": 0.0086,
+    "pred": -0.0088
+   },
+   {
+    "n": 236,
+    "actual": 0.0489,
+    "pred": 0.0419
+   },
+   {
+    "n": 236,
+    "actual": 0.1735,
+    "pred": 0.1267
+   }
+  ]
+ },
+ "test": {
+  "label": "2026 (not used to fit)",
+  "n": 199,
+  "rho": 0.174,
+  "rho_old": 0.111,
+  "n_old": 199,
+  "bands": [
+   {
+    "key": "big_edge",
+    "label": "Big edge",
+    "n": 53,
+    "actual": 0.0451,
+    "pred": 0.1134
+   },
+   {
+    "key": "small_edge",
+    "label": "Small edge",
+    "n": 28,
+    "actual": 0.0344,
+    "pred": 0.0411
+   },
+   {
+    "key": "neutral",
+    "label": "Neutral",
+    "n": 35,
+    "actual": 0.0357,
+    "pred": 0.0014
+   },
+   {
+    "key": "small_disadvantage",
+    "label": "Small disadvantage",
+    "n": 37,
+    "actual": -0.0944,
+    "pred": -0.0368
+   },
+   {
+    "key": "big_disadvantage",
+    "label": "Big disadvantage",
+    "n": 46,
+    "actual": -0.1374,
+    "pred": -0.1237
+   }
+  ],
+  "fifths": [
+   {
+    "n": 40,
+    "actual": -0.1339,
+    "pred": -0.1326
+   },
+   {
+    "n": 40,
+    "actual": -0.0805,
+    "pred": -0.042
+   },
+   {
+    "n": 39,
+    "actual": -0.0075,
+    "pred": 0.0002
+   },
+   {
+    "n": 40,
+    "actual": 0.0306,
+    "pred": 0.0509
+   },
+   {
+    "n": 40,
+    "actual": 0.0608,
+    "pred": 0.1275
+   }
+  ]
+ },
+ "seasons": {
+  "2023": {
+   "n": 396,
+   "rho": 0.196,
+   "rho_old": 0.011,
+   "n_old": 396,
+   "bands": [
+    {
+     "key": "big_edge",
+     "label": "Big edge",
+     "n": 82,
+     "actual": 0.2118,
+     "pred": 0.1184
+    },
+    {
+     "key": "small_edge",
+     "label": "Small edge",
+     "n": 51,
+     "actual": 0.0466,
+     "pred": 0.0397
+    },
+    {
+     "key": "neutral",
+     "label": "Neutral",
+     "n": 71,
+     "actual": -0.0216,
+     "pred": 0.0002
+    },
+    {
+     "key": "small_disadvantage",
+     "label": "Small disadvantage",
+     "n": 65,
+     "actual": -0.0991,
+     "pred": -0.0396
+    },
+    {
+     "key": "big_disadvantage",
+     "label": "Big disadvantage",
+     "n": 127,
+     "actual": -0.1081,
+     "pred": -0.1088
+    }
+   ],
+   "fifths": [
+    {
+     "n": 79,
+     "actual": -0.0465,
+     "pred": -0.1303
+    },
+    {
+     "n": 79,
+     "actual": -0.181,
+     "pred": -0.0638
+    },
+    {
+     "n": 78,
+     "actual": -0.0135,
+     "pred": -0.0181
+    },
+    {
+     "n": 80,
+     "actual": -0.0128,
+     "pred": 0.0315
+    },
+    {
+     "n": 80,
+     "actual": 0.2261,
+     "pred": 0.1198
+    }
+   ]
+  },
+  "2024": {
+   "n": 391,
+   "rho": 0.187,
+   "rho_old": 0.097,
+   "n_old": 391,
+   "bands": [
+    {
+     "key": "big_edge",
+     "label": "Big edge",
+     "n": 97,
+     "actual": 0.1533,
+     "pred": 0.1143
+    },
+    {
+     "key": "small_edge",
+     "label": "Small edge",
+     "n": 72,
+     "actual": 0.0084,
+     "pred": 0.0397
+    },
+    {
+     "key": "neutral",
+     "label": "Neutral",
+     "n": 70,
+     "actual": 0.0162,
+     "pred": -0.0039
+    },
+    {
+     "key": "small_disadvantage",
+     "label": "Small disadvantage",
+     "n": 53,
+     "actual": -0.0537,
+     "pred": -0.0382
+    },
+    {
+     "key": "big_disadvantage",
+     "label": "Big disadvantage",
+     "n": 99,
+     "actual": -0.158,
+     "pred": -0.1153
+    }
+   ],
+   "fifths": [
+    {
+     "n": 78,
+     "actual": -0.1926,
+     "pred": -0.1283
+    },
+    {
+     "n": 78,
+     "actual": -0.0488,
+     "pred": -0.045
+    },
+    {
+     "n": 77,
+     "actual": 0.0099,
+     "pred": 0.0011
+    },
+    {
+     "n": 79,
+     "actual": 0.0465,
+     "pred": 0.0484
+    },
+    {
+     "n": 79,
+     "actual": 0.1585,
+     "pred": 0.1247
+    }
+   ]
+  },
+  "2025": {
+   "n": 393,
+   "rho": 0.098,
+   "rho_old": -0.05,
+   "n_old": 391,
+   "bands": [
+    {
+     "key": "big_edge",
+     "label": "Big edge",
+     "n": 95,
+     "actual": 0.1742,
+     "pred": 0.1228
+    },
+    {
+     "key": "small_edge",
+     "label": "Small edge",
+     "n": 46,
+     "actual": -0.0641,
+     "pred": 0.0412
+    },
+    {
+     "key": "neutral",
+     "label": "Neutral",
+     "n": 72,
+     "actual": 0.1351,
+     "pred": 0.0018
+    },
+    {
+     "key": "small_disadvantage",
+     "label": "Small disadvantage",
+     "n": 47,
+     "actual": 0.0211,
+     "pred": -0.0375
+    },
+    {
+     "key": "big_disadvantage",
+     "label": "Big disadvantage",
+     "n": 133,
+     "actual": -0.0319,
+     "pred": -0.1221
+    }
+   ],
+   "fifths": [
+    {
+     "n": 79,
+     "actual": -0.0405,
+     "pred": -0.1516
+    },
+    {
+     "n": 78,
+     "actual": 0.0364,
+     "pred": -0.0685
+    },
+    {
+     "n": 79,
+     "actual": 0.0473,
+     "pred": -0.0107
+    },
+    {
+     "n": 78,
+     "actual": 0.0487,
+     "pred": 0.0422
+    },
+    {
+     "n": 79,
+     "actual": 0.1633,
+     "pred": 0.1337
+    }
+   ]
+  },
+  "2026": {
+   "n": 199,
+   "rho": 0.174,
+   "rho_old": 0.111,
+   "n_old": 199,
+   "bands": [
+    {
+     "key": "big_edge",
+     "label": "Big edge",
+     "n": 53,
+     "actual": 0.0451,
+     "pred": 0.1134
+    },
+    {
+     "key": "small_edge",
+     "label": "Small edge",
+     "n": 28,
+     "actual": 0.0344,
+     "pred": 0.0411
+    },
+    {
+     "key": "neutral",
+     "label": "Neutral",
+     "n": 35,
+     "actual": 0.0357,
+     "pred": 0.0014
+    },
+    {
+     "key": "small_disadvantage",
+     "label": "Small disadvantage",
+     "n": 37,
+     "actual": -0.0944,
+     "pred": -0.0368
+    },
+    {
+     "key": "big_disadvantage",
+     "label": "Big disadvantage",
+     "n": 46,
+     "actual": -0.1374,
+     "pred": -0.1237
+    }
+   ],
+   "fifths": [
+    {
+     "n": 40,
+     "actual": -0.1339,
+     "pred": -0.1326
+    },
+    {
+     "n": 40,
+     "actual": -0.0805,
+     "pred": -0.042
+    },
+    {
+     "n": 39,
+     "actual": -0.0075,
+     "pred": 0.0002
+    },
+    {
+     "n": 40,
+     "actual": 0.0306,
+     "pred": 0.0509
+    },
+    {
+     "n": 40,
+     "actual": 0.0608,
+     "pred": 0.1275
+    }
+   ]
+  }
+ }
+}

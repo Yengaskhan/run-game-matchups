@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { matchup } from './edge';
+import { changeText, defIndex, matchup } from './edge';
 import { formatCell } from './format';
 import type { HashState, Update } from './MatchupApp';
 import { DefenseContext, GROUP_LABEL, pfrNote, StatStrip } from './parts';
@@ -29,16 +29,20 @@ export function DefenseView({ report, season, hash, update }: { report: WeekRepo
     if (row.starter && !ids.includes(row.starter.id)) ids.unshift(row.starter.id);
     return ids
       .map((id) => ({ id, name: report.players.find((p) => p.id === id)?.name ?? row.seasons[season]?.rushers.find((r) => r.id === id)?.name ?? id, team: row.offense, ps: pool.players[id] }))
-      .map((x) => ({ ...x, m: matchup(x.ps, d, report) }));
+      .map((x) => ({ ...x, m: matchup(x.ps, d, report, pool.league.overall, row.seasons[season]?.model.vegas ?? null) }));
   }, [report, season, team]);
-  const league = useMemo(() => {
-    const list = report.rows
-      .filter((r) => r.starter && r.offense !== team && pool.players[r.starter.id])
-      .map((r) => ({ id: r.starter!.id, name: r.starter!.name, team: r.offense, m: matchup(pool.players[r.starter!.id], d, report) }))
-      .filter((x) => x.m.run_edge != null && !x.m.small)
-      .sort((a, b) => b.m.run_edge! - a.m.run_edge!);
-    return { best: list.slice(0, 5), worst: list.slice(-5).reverse() };
-  }, [report, season, team]);
+  // Every defense's run-game factor (what it does to a typical back's rushing, before the Vegas line).
+  const ranking = useMemo(() => {
+    const c = report.edge.model;
+    const lg = pool.league.overall;
+    return Object.values(pool.defenses)
+      .map((x) => {
+        const f = Math.exp(c.w_sr * Math.log(defIndex(x.overall.sr, lg.sr, x.overall.games, c.k_games)) + c.w_ypc * Math.log(defIndex(x.overall.ypc, lg.ypc, x.overall.games, c.k_games)));
+        return { team: x.team, f };
+      })
+      .sort((p, q) => q.f - p.f);
+  }, [report, season]);
+  const rank = ranking.findIndex((x) => x.team === team) + 1;
 
   return (
     <div className="space-y-4">
@@ -77,17 +81,18 @@ export function DefenseView({ report, season, hash, update }: { report: WeekRepo
             <BackList rows={facing} update={update} opp={team} empty={`No ${row.offense} backs with designed runs in this season.`} />
           )}
         </Panel>
-        <Panel title={`If this week's starters faced ${team}`} note="Best and toughest, other teams' starting RBs">
-          <div className="grid gap-3 sm:grid-cols-2">
-            <div>
-              <p className="mb-1.5 text-[10.5px] font-medium uppercase tracking-wider text-edge-good">Best</p>
-              <BackList rows={league.best} update={update} opp={team} empty="No ranked starters yet." compact />
-            </div>
-            <div>
-              <p className="mb-1.5 text-[10.5px] font-medium uppercase tracking-wider text-edge-bad">Toughest</p>
-              <BackList rows={league.worst} update={update} opp={team} empty="No ranked starters yet." compact />
-            </div>
-          </div>
+        <Panel title="Run defenses, softest to toughest" note={`${team}: ${rank} of ${ranking.length} · effect on a typical back, before the Vegas line`}>
+          <ol className="grid grid-cols-2 gap-x-4 gap-y-0.5 text-[12px]">
+            {ranking.map((x, i) => (
+              <li key={x.team}>
+                <button type="button" onClick={() => update({ team: x.team })} className={`flex w-full items-center gap-1.5 rounded px-1 text-left hover:bg-panel-2 ${x.team === team ? 'bg-accent/10 font-semibold' : ''}`}>
+                  <span className="w-5 text-right text-ink-3">{i + 1}</span>
+                  <TeamLogo team={x.team} size={14} /> {x.team}
+                  <span className={`num ml-auto ${x.f > 1.01 ? 'text-edge-good' : x.f < 0.99 ? 'text-edge-bad' : 'text-ink-2'}`}>{changeText(x.f)}</span>
+                </button>
+              </li>
+            ))}
+          </ol>
         </Panel>
       </div>
       {report.scheme && (

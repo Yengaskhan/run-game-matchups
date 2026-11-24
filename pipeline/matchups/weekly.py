@@ -10,7 +10,8 @@ import polars as pl
 
 from . import fmt
 from .datasuite import DEF_STATUS, qualifier_note, scheme_block, scheme_player, team_defense_block, team_defense_meta
-from .config import BOX_BUCKETS, DIRECTIONS, EDGE, EXPLOSIVE_YARDS, GAPS, QUALIFIERS, SCHEMA_VERSION
+from .config import BOX_BUCKETS, DIRECTIONS, EDGE, EXPLOSIVE_YARDS, GAPS, MODEL, QUALIFIERS, SCHEMA_VERSION
+from . import model
 from .metrics import agg_exprs, nan_to_none, pct_from_rank
 from .plays import FILTERS
 from .window import LeagueWindow
@@ -22,7 +23,7 @@ GROUPS = [
 ]
 RANKED = ["ypc", "sr", "expl", "stuff", "ybc_att", "yac_att"]
 SPLIT_KEYS = ("att", "share", "ypc", "sr")
-OFF_KEYS = ("games", "att", "ypc", "sr", "expl", "stuff", "ybc_att", "yac_att", "pfr_att", "carry_share", "snap_share")
+OFF_KEYS = ("games", "att", "yds", "ypc", "sr", "expl", "stuff", "ybc_att", "yac_att", "pfr_att", "carry_share", "snap_share")
 DEF_KEYS = ("games", "att", "ypc", "sr", "expl", "stuff", "ybc_att", "yac_att", "pfr_att", "qb_att")
 
 
@@ -38,23 +39,6 @@ def metrics(rec: dict | None, keys=SPLIT_KEYS) -> dict:
     m["att"] = int(rec.get("att") or 0)
     m["ranks"] = {k: [int(rec[f"{k}_rank"]), int(rec[f"{k}_n"])] for k in RANKED if k in keys and rec.get(f"{k}_rank") is not None and rec.get(f"{k}_n")}
     return m
-
-
-def edge_from(off: dict, dfn: dict) -> int | None:
-    """50 + 50 x (RB percentile - defense percentile), each side's percentile being the average over
-    EDGE["metrics"] (success rate and YPC). None unless both sides are ranked on every metric."""
-    ms = EDGE["metrics"]
-    if not all(m in off["ranks"] and m in dfn["ranks"] for m in ms):
-        return None
-    po = sum(pct_from_rank(*off["ranks"][m]) for m in ms) / len(ms)
-    pd_ = sum(pct_from_rank(*dfn["ranks"][m]) for m in ms) / len(ms)
-    return round(50 + 50 * (po - pd_))
-
-
-def band(edge: int | None, small_sample: bool = False) -> str:
-    if edge is None or small_sample:
-        return "neutral"
-    return next(key for key, _label, lo in EDGE["bands"] if edge >= lo)
 
 
 # ------------------------------------------------------------------------------------------------
@@ -93,15 +77,20 @@ def defense_stats(w: LeagueWindow, team: str) -> dict | None:
     return {"team": team, "overall": metrics(w.row("def", team=team), DEF_KEYS), "splits": splits}
 
 
+def league_overall(w: LeagueWindow) -> dict:
+    """League success rate and YPC on designed runs in the window, rounded as written to the JSON."""
+    return {k: _round(w.league["overall"].get(k)) for k in ("sr", "ypc")}
+
+
 def side_block(w: LeagueWindow, off: str, dfn: str, depth: list[dict], starter: dict | None,
-               players_prior: list[dict] | None = None) -> dict | None:
+               players_prior: list[dict] | None = None, vegas: dict | None = None) -> dict | None:
     """Everything the slate shows for one starting RB vs one defense in one season window.
 
     The offense side is the starting RB's OWN designed runs (current season: for this team; prior season:
     his full line, any team), ranked among non-QB rushers. The defense side is the defense against every
-    rusher. QB runs, backups and the rest of the team are left out of the RB's numbers. The same numbers
-    are in the report's player / defense pool (player_stats / defense_stats), which the page uses to
-    score any RB against any defense."""
+    rusher. The Run Edge (model.py) comes from the defense and this week's Vegas line; the RB's numbers set
+    his normal game for the projection. The same numbers are in the report's player / defense pool, which the
+    page uses to score any RB against any defense."""
     if not w.weeks or "off" not in w.tables:
         return None
     pid = starter["id"] if starter else None
@@ -109,6 +98,8 @@ def side_block(w: LeagueWindow, off: str, dfn: str, depth: list[dict], starter: 
     ds = defense_stats(w, dfn)
     o_over = ps["overall"] if ps else metrics(None, OFF_KEYS)
 
+    # Direction / gap / box splits: context only. The backtest found no predictive value in matching the RB's
+    # own splits to the defense's, so they carry no edge.
     splits = []
     for group, buckets in GROUPS:
         if group not in ds["splits"]:
@@ -116,15 +107,16 @@ def side_block(w: LeagueWindow, off: str, dfn: str, depth: list[dict], starter: 
         for key, label in buckets:
             o = (ps["splits"].get(group, {}).get(key) if ps else None) or metrics(None)
             d = ds["splits"][group].get(key) or metrics(None)
-            splits.append({"group": group, "key": key, "label": label, "off": o, "def": d, "edge": edge_from(o, d)})
+            splits.append({"group": group, "key": key, "label": label, "off": o, "def": d, "edge": None})
 
-    # Headline Run Edge: direction edges weighted by where the RB runs.
+    m = model.matchup(ds["overall"], league_overall(w), vegas)
+    base = o_over["yds"] / o_over["games"] if o_over.get("games") and o_over.get("yds") is not None else None
+    m["vegas"] = vegas
+    m["base_ypg"] = _round(base)
+    m["proj_yds"] = _round(base * m["mult"]) if base is not None else None
+    small = o_over["att"] < MODEL["min_att"]
+
     dirs = [s for s in splits if s["group"] == "direction"]
-    ranked = [s for s in dirs if s["edge"] is not None and s["off"]["share"]]
-    coverage = sum(s["off"]["share"] for s in ranked)
-    run_edge = round(sum(s["edge"] * s["off"]["share"] for s in ranked) / coverage) if coverage else None
-    small = coverage < EDGE["min_coverage"]
-
     top = max(dirs, key=lambda s: s["off"]["share"] or 0) if dirs else None
     name = starter["name"] if starter else off
     return {
@@ -132,14 +124,14 @@ def side_block(w: LeagueWindow, off: str, dfn: str, depth: list[dict], starter: 
         "weeks": w.weeks,
         "subject": {"kind": "rb", "id": pid, "name": name, "team": off, "teams": ps["team"] if ps and not w.is_current else None},
         "overall": {"off": o_over, "def": ds["overall"]},
-        "run_edge": run_edge,
-        "edge_coverage": _round(coverage),
+        "run_edge": m["run_edge"],
         "small_sample": small,
-        "band": band(run_edge, small),
+        "band": m["band"],
+        "model": m,
         "top_direction": {"key": top["key"], "label": top["label"], "share": top["off"]["share"], "att": top["off"]["att"]} if top and top["off"]["att"] else None,
         "splits": splits,
         "rushers": rushers_block(w, off, depth) if w.is_current else prior_rushers_block(w, players_prior or []),
-        "takeaways": takeaways(name, dfn, splits, o_over["att"], w),
+        "takeaways": takeaways(name, off, dfn, m, o_over, ds["overall"], league_overall(w), w),
     }
 
 
@@ -227,24 +219,19 @@ def prior_rushers_block(w: LeagueWindow, players: list[dict]) -> list[dict]:
     return out
 
 
-def takeaways(name: str, dfn: str, splits: list[dict], att: int, w: LeagueWindow) -> list[str]:
-    """At most two lines: the RB's biggest edge each way among the gaps he uses most."""
-    if not att:
-        return [f"{name} has no designed runs in {w.season} {fmt.weeks_label(w.weeks)}, so there's nothing to compare yet."]
-    used = [s for s in splits if s["group"] == "gap" and (s["off"]["share"] or 0) >= EDGE["min_share"] and s["edge"] is not None]
-    if not used:
-        return [f"No gap {name} uses on {fmt.pct(EDGE['min_share'])}+ of his runs has both sides ranked yet (samples too small)."]
-
-    def line(s, who):
-        o, d = s["off"], s["def"]
-        return (f"{who}: {s['label']} (edge {s['edge']}). {name} runs there {fmt.pct(o['share'])} of the time: "
-                f"{fmt.pct(o['sr'])} success ({fmt.rank(*o['ranks']['sr'])} RBs), {fmt.dec(o['ypc'])} YPC ({fmt.rank(*o['ranks']['ypc'])}), n={o['att']}. "
-                f"{dfn} allows {fmt.pct(d['sr'])} success ({fmt.rank(*d['ranks']['sr'])}), {fmt.dec(d['ypc'])} YPC ({fmt.rank(*d['ranks']['ypc'])}), n={d['att']}.")
-
-    hi, lo = max(used, key=lambda s: s["edge"]), min(used, key=lambda s: s["edge"])
-    out = [line(hi, "Best spot" if hi["edge"] >= 50 else "Least unfavorable of his main gaps")]
-    if lo is not hi:
-        out.append(line(lo, "Toughest spot" if lo["edge"] < 50 else "Least favorable of his main gaps"))
+def takeaways(name: str, off: str, dfn: str, m: dict, o: dict, d: dict, lg: dict, w: LeagueWindow) -> list[str]:
+    """Why the Run Edge is what it is: the defense, then the game environment, then his projection."""
+    out = [f"{dfn} allows {fmt.pct(d['sr'])} success (league {fmt.pct(lg['sr'])}) and {fmt.dec(d['ypc'])} YPC (league {fmt.dec(lg['ypc'])}) "
+           f"on designed runs over {d['games']} games: {fmt.signed_pct(m['sr_idx'] ** MODEL['w_sr'] * m['ypc_idx'] ** MODEL['w_ypc'] - 1)} for the run game."]
+    v = m.get("vegas")
+    if v and v.get("avg") and v["n"] >= MODEL["vegas_min_games"]:
+        out.append(f"Vegas: {off} implied total {v['implied']:.1f} vs its usual {v['avg']:.1f}: {fmt.signed_pct(m['vegas_idx'] ** MODEL['w_vegas'] - 1)}.")
+    if not o["att"]:
+        out.append(f"{name} has no designed runs in {w.season} {fmt.weeks_label(w.weeks)}, so there's no normal game to project from.")
+    elif m.get("proj_yds") is not None:
+        out.append(f"{name}'s normal game: {fmt.dec(m['base_ypg'])} rushing yards (designed runs, {o['games']} games). "
+                   f"Matchup-adjusted: {fmt.dec(m['proj_yds'])} ({fmt.signed_pct(m['mult'] - 1)})."
+                   + (f" Small sample ({o['att']} carries): treat as rough." if o["att"] < MODEL["min_att"] else ""))
     return out
 
 
@@ -252,7 +239,8 @@ def takeaways(name: str, dfn: str, splits: list[dict], att: int, w: LeagueWindow
 
 def week_report(season: int, week: int, games: list[dict], cur: LeagueWindow, prior: LeagueWindow,
                 depth_by_game: dict[str, dict[str, list[dict]]], checks: list[str],
-                scheme_pick: dict | None = None, scheme_note: str | None = None, td_picks: dict[int, dict] | None = None) -> dict:
+                scheme_pick: dict | None = None, scheme_note: str | None = None, td_picks: dict[int, dict] | None = None,
+                vegas: dict[str, dict] | None = None) -> dict:
     """scheme_pick: the Data Suite rushing export chosen for this week (see datasuite.pick_rushing_export)."""
     scheme_pick = scheme_pick or {"status": "No Data Suite rushing export has been added yet."}
     rows = []
@@ -261,7 +249,8 @@ def week_report(season: int, week: int, games: list[dict], cur: LeagueWindow, pr
         for off, dfn, home in [(g["away_team"], g["home_team"], False), (g["home_team"], g["away_team"], True)]:
             dep = depth.get(off, [])
             starter = {"id": dep[0]["gsis_id"], "name": dep[0]["name"]} if dep else None
-            cur_block = side_block(cur, off, dfn, dep, starter)
+            vg = (vegas or {}).get(off)
+            cur_block = side_block(cur, off, dfn, dep, starter, vegas=vg)
             if cur_block:
                 # Run scheme (zone vs man/gap): Data Suite, current season only, kept apart from nflverse numbers.
                 cur_block["scheme"] = scheme_block(scheme_pick, starter)
@@ -271,7 +260,7 @@ def week_report(season: int, week: int, games: list[dict], cur: LeagueWindow, pr
                 "game_id": g["game_id"], "offense": off, "defense": dfn, "home": home,
                 # Starting RB: RB1 on the nflverse depth chart (latest snapshot; before kickoff day for played games).
                 "starter": starter,
-                "seasons": {str(cur.season): cur_block, str(prior.season): side_block(prior, off, dfn, dep, starter, players)},
+                "seasons": {str(cur.season): cur_block, str(prior.season): side_block(prior, off, dfn, dep, starter, players, vegas=vg)},
             })
     players = roster(cur, depth_by_game)
     bands = [{"key": k, "label": label, "min": lo} for k, label, lo in EDGE["bands"]]
@@ -298,12 +287,13 @@ def week_report(season: int, week: int, games: list[dict], cur: LeagueWindow, pr
         "team_defense": {str(sn): team_defense_meta((td_picks or {}).get(sn) or {"status": "No Data Suite team defense export has been added yet."}) for sn in (cur.season, prior.season)},
         "edge": {
             "bands": bands,
-            "min_coverage": EDGE["min_coverage"],
-            "definition": ("Run Edge (0–100, 50 = neutral), starting RB vs run defense. In each direction, gap or box count: "
-                           "50 + 50 × (the RB's percentile among RBs − the defense's percentile among defenses), where each side's percentile "
-                           "is the average of its success-rate and yards-per-carry percentiles, each within its own ranked table. The headline edge averages the left / middle / right edges, weighted by how often the "
-                           f"RB runs each way. It is shaded only when the ranked directions cover at least {fmt.pct(EDGE['min_coverage'])} of his runs; "
-                           "otherwise it shows grey as a small sample."),
+            "model": {k: MODEL[k] for k in ("k_games", "w_sr", "w_ypc", "w_vegas", "vegas_min_games", "scale", "min_att")},
+            "definition": ("Run Edge (0–100, 50 = neutral): how much more or less the starting RB should rush for than in his normal game. "
+                           f"It multiplies what this defense allows per designed run (success rate^{MODEL['w_sr']} × YPC^{MODEL['w_ypc']}, each vs league and "
+                           f"shrunk toward average by games: G / (G + {MODEL['k_games']})) by his team's Vegas implied total vs its usual (^{MODEL['w_vegas']}). "
+                           f"Score = 50 + 50 × tanh(ln(multiplier) / {MODEL['scale']}): +5% → 66, +10% → 79, −5% → 33. "
+                           "The weights come from a backtest of every 2023–2025 week scored from earlier games only, checked on 2026 (see the Track record tab). "
+                           "The RB's own direction and gap splits are shown for context; they did not predict results."),
         },
         "notes": [
             "Each row is the starting RB (RB1 on the nflverse depth chart) against the opposing run defense. The RB side counts only his own designed runs (current season: for this team; prior season: his full line, any team); QB runs and backups are not included. The defense side is against every rusher.",

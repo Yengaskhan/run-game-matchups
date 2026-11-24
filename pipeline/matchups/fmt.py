@@ -37,3 +37,11 @@ def weeks_label(weeks: list[int]) -> str:
     if not weeks:
         return "no games yet"
     return f"week {weeks[0]}" if len(weeks) == 1 else f"weeks {weeks[0]}–{weeks[-1]}"
+
+
+def signed_pct(v: float | None) -> str:
+    """+0.083 -> "+8%"; −0.04 -> "−4%"."""
+    if v is None:
+        return "—"
+    n = round(v * 100)
+    return f"+{n}%" if n > 0 else (f"−{-n}%" if n < 0 else "±0%")

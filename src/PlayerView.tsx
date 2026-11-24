@@ -1,10 +1,10 @@
 import { useMemo } from 'react';
-import { matchup, spots, type Matchup } from './edge';
+import { changeText, matchup, type Matchup } from './edge';
 import { formatCell, formatDate, formatKickoff } from './format';
 import type { HashState, Update } from './MatchupApp';
 import { Backs, DefenseContext, PlayerPicker, pfrNote, SchemeTable, SplitTable, StatStrip } from './parts';
 import { TeamLogo, teamName } from './TeamLogo';
-import type { PoolDefense, PoolPlayer, SchemeRow, Split, WeekReport } from './types';
+import type { PoolDefense, PoolPlayer, SchemeRow, Vegas, WeekReport } from './types';
 import { Card, EdgeBadge, Panel, Pill, rankPhrase, Select } from './ui';
 
 /** One RB against one defense: this week's opponent by default, or any other defense. */
@@ -20,7 +20,9 @@ export function PlayerView({ report, season, hash, update }: { report: WeekRepor
   const scheduled = row?.defense === opp;
   const ps = pool.players[player.id] ?? null;
   const d = pool.defenses[opp];
-  const m = matchup(ps, d, report);
+  // Vegas only applies to the scheduled game; any other pairing is scored as a neutral game environment.
+  const vegas = scheduled ? (row?.seasons[season]?.model.vegas ?? null) : null;
+  const m = matchup(ps, d, report, pool.league.overall, vegas);
   const meta = report.seasons.find((s) => String(s.season) === season)!;
   const backs = row?.seasons[season]?.rushers ?? [];
 
@@ -80,7 +82,7 @@ export function PlayerView({ report, season, hash, update }: { report: WeekRepor
           {player.name} has no designed runs {meta.current ? `for ${player.team} in ${meta.label}` : `in ${meta.label}`}, so there's nothing to score yet. {opp}'s run defense is below.
         </p>
       ) : (
-        <HeaderCards name={player.name} ps={ps} d={d} m={m} />
+        <HeaderCards team={player.team} ps={ps} d={d} m={m} vegas={vegas} scheduled={scheduled} league={pool.league.overall} report={report} />
       )}
 
       <div className="grid gap-2 md:grid-cols-2">
@@ -88,8 +90,8 @@ export function PlayerView({ report, season, hash, update }: { report: WeekRepor
         <StatStrip title={`${opp} defense allowed`} m={d.overall} kind="defense" note={pfrNote(report, season)} team={opp} />
       </div>
 
-      <Panel title="Where he runs, and what this defense allows there" note="His carries only · ranks are rank/peer group · n = attempts · left / right = offense's view">
-        <SplitTable splits={m.splits} rb={player.name} dfn={opp} report={report} />
+      <Panel title="Where he runs, and what this defense allows there" note="Context: not part of the Run Edge · his carries only · ranks are rank/peer group · left / right = offense's view">
+        <SplitTable splits={m.splits} rb={player.name} dfn={opp} />
       </Panel>
 
       <DefenseContext d={d} report={report} season={season} />
@@ -103,49 +105,43 @@ export function PlayerView({ report, season, hash, update }: { report: WeekRepor
   );
 }
 
-function spotText(s: Split) {
-  return `${s.label} (edge ${s.edge}): he runs there ${formatCell(s.off.share ?? null, 'pct')} of the time, ${formatCell(s.off.sr, 'pct')} success; allowed ${formatCell(s.def.sr, 'pct')}.`;
-}
-
-function HeaderCards({ name, ps, d, m }: { name: string; ps: PoolPlayer; d: PoolDefense; m: Matchup }) {
-  const { best, worst } = spots(m);
+function HeaderCards({ team, ps, d, m, vegas, scheduled, league, report }: {
+  team: string; ps: PoolPlayer; d: PoolDefense; m: Matchup; vegas: Vegas | null; scheduled: boolean;
+  league: { sr: number | null; ypc: number | null }; report: WeekReport;
+}) {
   const o = ps.overall;
   const a = d.overall;
+  const c = report.edge.model;
+  const vegasLine =
+    vegas && vegas.avg && vegas.n >= c.vegas_min_games
+      ? `Vegas: ${team} implied ${vegas.implied?.toFixed(1)} vs usual ${vegas.avg.toFixed(1)} → ${changeText(m.vegas_part)}`
+      : scheduled
+        ? `Vegas: ${team} has fewer than ${c.vegas_min_games} lined games, so neutral`
+        : 'Vegas: no line (not this week’s game), so neutral';
+  const tone = (x: number) => (x > 1.01 ? 'text-edge-good' : x < 0.99 ? 'text-edge-bad' : 'text-ink-2');
   return (
     <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
-      <Card
-        label="Run Edge"
-        sub={
-          m.run_edge == null
-            ? 'No direction where both sides are ranked yet.'
-            : m.small
-              ? `Small sample: ranked directions cover ${formatCell(m.coverage, 'pct')} of his runs.`
-              : `Left / middle / right edges, weighted by where he runs (${formatCell(m.coverage, 'pct')} of his runs ranked).`
-        }
-      >
-        <EdgeBadge edge={m.run_edge} band={m.band} small={m.small} lg />
+      <Card label="Run Edge" sub={`${changeText(m.mult)} rushing vs his normal game. 50 = an average matchup.`}>
+        <EdgeBadge edge={m.run_edge} band={m.band} lg />
       </Card>
-      <Card label="Success rate" sub={`${rankPhrase(o.ranks.sr, 'RBs')} · ${d.team} allows ${formatCell(a.sr, 'pct')} (${rankPhrase(a.ranks.sr)})`}>
-        <span className="num text-[22px] font-semibold">{formatCell(o.sr, 'pct')}</span>
+      <Card label="Matchup-adjusted rush yds" sub={m.base_ypg != null ? `His normal game: ${m.base_ypg.toFixed(1)} yds on designed runs (${o.games} games)${m.small ? ` · small sample (${o.att} carries)` : ''}` : undefined}>
+        <span className="num text-[22px] font-semibold">{m.proj_yds != null ? m.proj_yds.toFixed(1) : '—'}</span>
       </Card>
-      <Card label="Yards per carry" sub={`${rankPhrase(o.ranks.ypc, 'RBs')} · ${d.team} allows ${formatCell(a.ypc, 'dec1')} (${rankPhrase(a.ranks.ypc)})`}>
-        <span className="num text-[22px] font-semibold">{formatCell(o.ypc, 'dec1')}</span>
+      <Card label="Why">
+        <ul className="space-y-1 text-[12px] leading-snug">
+          <li className={tone(m.def_part)}>
+            {d.team} allows {formatCell(a.sr, 'pct')} success (lg {formatCell(league.sr, 'pct')}) and {formatCell(a.ypc, 'dec1')} YPC (lg {formatCell(league.ypc, 'dec1')}) → {changeText(m.def_part)}
+          </li>
+          <li className={tone(m.vegas_part)}>{vegasLine}</li>
+        </ul>
       </Card>
-      <Card label="Best and toughest gap">
-        {best ? (
-          <div className="space-y-1 text-[12px] leading-snug">
-            <p className={best.edge! >= 50 ? 'text-edge-good' : best.edge! < 43 ? 'text-edge-bad' : 'text-ink-2'}>
-              <b>{worst ? 'Best' : 'Only ranked gap'}:</b> {spotText(best)}
-            </p>
-            {worst && (
-              <p className={worst.edge! < 50 ? 'text-edge-bad' : 'text-ink-2'}>
-                <b>Toughest:</b> {spotText(worst)}
-              </p>
-            )}
-          </div>
-        ) : (
-          <p className="text-[12px] text-ink-3">No gap {name} uses on 10%+ of his runs has both sides ranked yet (samples too small).</p>
-        )}
+      <Card label="His efficiency (context)" sub={`Not in the Run Edge: it measures the matchup, and his own level is already in his normal game.`}>
+        <p className="num text-[13px]">
+          {formatCell(o.sr, 'pct')} success <span className="text-ink-3">({rankPhrase(o.ranks.sr, 'RBs')})</span>
+        </p>
+        <p className="num text-[13px]">
+          {formatCell(o.ypc, 'dec1')} YPC <span className="text-ink-3">({rankPhrase(o.ranks.ypc, 'RBs')})</span>
+        </p>
       </Card>
     </div>
   );
@@ -160,7 +156,7 @@ function SchemePanel({ report, ps, name, opp }: { report: WeekReport; ps: PoolPl
   const status = sc.status ?? (rows ? null : `${name} isn't in the Data Suite rushing export.`);
   return (
     <Panel title="Run scheme: zone vs man/gap" note={`Data Suite${exported ? ` export of ${exported}` : ''} (not nflverse)`}>
-      {status || !rows ? <p className="text-[12px] text-ink-2">{status}</p> : <SchemeTable rows={rows} rb={name} dfn={opp} report={report} />}
+      {status || !rows ? <p className="text-[12px] text-ink-2">{status}</p> : <SchemeTable rows={rows} rb={name} dfn={opp} />}
       <p className="mt-2 text-[10.5px] text-ink-3">
         Zone vs man/gap is how the line blocked the run. Data Suite counts all of his carries, so totals can differ slightly from the nflverse designed-run numbers above. {sc.qualifier}
         {rows && sc.def_status ? ` ${sc.def_status}` : ''}

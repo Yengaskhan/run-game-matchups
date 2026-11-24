@@ -12,7 +12,7 @@ APP_ROOT = Path(__file__).resolve().parents[2]
 OUTPUT_DIR = APP_ROOT / "data"
 
 # Bump when the JSON layout changes in a way the page must know about.
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 
 # Only regular-season games feed either season's numbers. Playoff games are excluded.
 SEASON_TYPE = "REG"
@@ -35,17 +35,32 @@ QUALIFIERS = {
     "rusher_bucket_min_att_prior": 20,
 }
 
-# Run Edge (0-100, 50 = neutral). In one bucket (a direction, gap or box count):
-#   edge = 50 + 50 x (RB percentile - defense percentile)
-# where each side's percentile is the average of its success-rate and yards-per-carry percentiles
-# (EDGE["metrics"]), each within its own ranked table (1 = best RB / stingiest defense).
-# The headline Run Edge averages the left / middle / right edges, weighted by how often the RB
-# runs each way. It is only shaded when the ranked directions cover at least `min_coverage` of
-# his runs; below that it shows grey as "small sample".
+# Run Edge (0-100, 50 = neutral): how much more (or less) the starting RB should rush for than in his
+# normal game, from what this defense allows and this week's Vegas line. Weights come from a walk-forward
+# backtest (pipeline/backtest.py -> data/backtest/run-edge.json): every 2023-2025 week scored from earlier
+# games only, compared with each lead back's actual rushing yards; 2026 weeks are the out-of-sample check.
+#
+#   sr_idx    = 1 + G / (G + k) x (success rate allowed / league - 1)        G = defense's games, shrunk toward 1.00
+#   ypc_idx   = 1 + G / (G + k) x (YPC allowed / league - 1)
+#   vegas     = his team's implied total this week / its average implied total in earlier weeks
+#               (1.00 until the team has `vegas_min_games` lined games)
+#   multiplier = sr_idx^w_sr x ypc_idx^w_ypc x vegas^w_vegas         expected change = multiplier - 1
+#   Run Edge  = 50 + 50 x tanh(ln(multiplier) / scale)               +5% -> 66, +10% -> 79, -5% -> 33
+#
+# The RB's own direction / gap splits did not predict anything once the defense was in, so they are context only.
+MODEL = {
+    "k_games": 3,
+    "w_sr": 0.51,
+    "w_ypc": 0.48,
+    "w_vegas": 0.35,
+    "vegas_min_games": 3,
+    "scale": 0.145,
+    # Below this many designed runs his "normal game" (yards per game) is too thin to project from.
+    "min_att": 25,
+}
+
 EDGE = {
-    # Metrics behind the edge, averaged as percentiles: success rate and yards per carry.
-    "metrics": ["sr", "ypc"],
-    "min_coverage": 0.5,
+    "min_coverage": 0.5,  # unused by the score; kept for the split tables' coverage note
     # Colour bands, lower bound inclusive.
     "bands": [
         ("big_edge", "Big edge", 70),

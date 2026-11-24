@@ -158,7 +158,7 @@ Every tunable number is in `pipeline/matchups/config.py`. Edit it, then re-run t
 | `QUALIFIERS["rusher_bucket_att_per_team_game"]` | 2.0 | The starting RB's own direction/gap/box bucket is ranked with ≥ 2 carries per team game in it (current season) |
 | `QUALIFIERS["rusher_bucket_min_att_prior"]` | 20 | Same, prior season (flat) |
 | `EDGE["bands"]` | 70 / 58 / 43 / 31 | Run Edge colour bands: big edge ≥ 70, small edge ≥ 58, neutral 43–57, small disadvantage 31–42, big disadvantage ≤ 30 |
-| `EDGE["min_coverage"]` | 0.5 | The headline Run Edge is shaded only when ranked directions cover ≥ 50% of the offense's runs (else grey "small sample") |
+| `MODEL` | see Run Edge | Run Edge weights, shrinkage (`k_games` 3), Vegas minimum (3 lined games), score scale (0.145), small-sample flag (25 carries). Set from `pipeline/backtest.py` |
 | `EDGE["min_share"]` | 0.10 | Detail takeaways only consider gaps the offense uses on ≥ 10% of its runs |
 | `EXPLOSIVE_YARDS` | 10 | Explosive run threshold |
 | `BOX_BUCKETS` | ≤6 / 7 / 8+ | Box-count buckets |
@@ -188,24 +188,49 @@ Every row still shows its numbers; a row that misses the qualifier just shows ra
 
 ## Run Edge
 
-A 0–100 score, 50 = even, shaded green (RB edge) to orange (defense edge).
+A 0–100 score, 50 = an average matchup, shaded green (good for the RB) to orange (bad). It answers one question: **how much more or less should this back rush for than in his normal game?**
 
-- **Per bucket** (a direction, gap or box count): `50 + 50 × (RB percentile among RBs − defense percentile among defenses)`. Each side's percentile is the average of its **success rate** and **yards per carry** percentiles (`EDGE["metrics"]` in config), each from its own ranked table, so a top RB on both meeting the leakiest defense on both scores 100. It's blank when either side is below the rank qualifier.
-- **Headline Run Edge:** the left / middle / right edges, averaged with weights from how often the RB runs each way. When the ranked directions cover less than half of the RB's runs, the badge shows grey with a dashed border ("small sample").
-- The **Split** selector (Left / Middle / Right) swaps the table to that one direction's numbers and edge.
+```
+sr_idx     = 1 + G / (G + 3) × (success rate allowed / league − 1)     G = the defense's games (shrinks small samples toward average)
+ypc_idx    = 1 + G / (G + 3) × (YPC allowed / league − 1)
+vegas      = his team's implied total this week / its average implied total in earlier weeks   (1.00 until 3 lined games)
+multiplier = sr_idx^0.51 × ypc_idx^0.48 × vegas^0.35                  expected change = multiplier − 1
+Run Edge   = 50 + 50 × tanh(ln(multiplier) / 0.145)                   +5% → 66, +10% → 79, −5% → 33
+projection = his rushing yards per game on designed runs × multiplier   ("Proj. rush yds")
+```
+
+- **The weights come from a test, not judgment.** `pipeline/backtest.py` scores every 2023–2025 week from week 4 on using only earlier games (nflverse play-by-play and schedule lines). It compares each lead back's actual rushing yards with his normal game (1,180 games), and refits the weights. 2026 is never used to fit; it is the out-of-sample check. Results are in `data/backtest/run-edge.json` and on the **Track Record** tab, re-run by the weekly refresh.
+- **What predicted results:**
+  - success rate and YPC allowed by the defense
+  - the Vegas implied team total vs the team's usual (more points expected → more and better runs)
+
+  Rank correlation with actual yards vs normal: 0.16 on 2023–25 and 0.17 on 2026.
+- **What did not, so it is context only:**
+  - the RB's own direction / gap splits matched to the defense's
+  - explosive and stuff rates allowed
+  - heavy-box rate
+  - the point spread on its own
+
+  The old Run Edge (direction-by-direction rank percentiles of RB vs defense) scored 0.02 on 2023–25 and 0.11 on 2026.
+- **It measures the matchup, not the back.** His own level is already in his normal game, so a great back facing an average defense gets 50 and a large projection. The page shows his efficiency separately as context.
+- **Small sample** (under 25 designed runs): the score still stands, but his "normal game" is thin, so the projection is flagged.
+- **Splits** (direction, gap, box count, zone vs man/gap) are shown for context and carry no edge.
+- **Other pairings:** the player page scores any back against any defense with the same formula. A pairing that isn't this week's game has no Vegas line, so the game factor is 1.00.
+
 
 ## Report layout
 
-Three tabs, like the WR/TE report. **Week** and **Season data** (current season to date, or the full prior season; never combined) sit above them and apply to all three.
+Four tabs, like the WR/TE report. **Week** and **Season data** (current season to date, or the full prior season; never combined) sit above them.
 
-- **Slate Rankings:** one row per offense playing that week, led by its starting RB (RB1 on the nflverse depth chart, with his carries and share of the team's designed runs), then opponent, the RB's success rate and YPC (ranked among RBs) and the defense's success rate and YPC allowed (ranked among defenses), with attempts, his main run direction, and Run Edge. Every column sorts. **Split** swaps the table to one direction or run scheme. Clicking a row opens the player page; clicking the opponent opens its defense profile.
+- **Slate Rankings:** one row per offense playing that week, led by its starting RB (RB1 on the nflverse depth chart, with his carries and share of the team's designed runs), then opponent, the RB's success rate and YPC (ranked among RBs) and the defense's success rate and YPC allowed (ranked among defenses), with attempts, his main run direction, RB fantasy points allowed (Data Suite, when available), his matchup-adjusted rushing yards and Run Edge. Every column sorts. **Split** swaps the numbers to one direction or run scheme (the Run Edge stays the whole matchup). Clicking a row opens the player page; clicking the opponent opens its defense profile.
 - **Player vs Defense:** pick any RB (search box) and any opponent (defaults to this week's).
-  - cards: Run Edge, his success rate and YPC (with what the defense allows), and his best and toughest gap
+  - cards: Run Edge, matchup-adjusted rushing yards, why (defense and Vegas, each as a %), and his own efficiency as context
   - stat strips for the RB and the defense (success, YPC, explosive, stuffed, YBC, YAC, with ranks)
-  - direction / gap / box splits: his carries | the defense's allowed | edge
+  - direction / gap / box splits: his carries | the defense's allowed (context)
   - run scheme (zone vs man/gap, Data Suite, current season)
   - his team's backfield (click a back to switch to him)
-- **Defense Profiles:** pick any defense. What it allows overall, then direction / gap / box cards: share of runs faced vs the league, and success / YPC allowed in each (green = allows more than the league). Below: this week's opposing backs with their Run Edge, and the best and toughest of this week's starting RBs if they faced it.
+- **Defense Profiles:** pick any defense. What it allows overall, then direction / gap / box cards: share of runs faced vs the league, and success / YPC allowed in each (green = allows more than the league). Below: this week's opposing backs with their Run Edge, and all 32 run defenses from softest to toughest (their effect on a typical back).
+- **Track Record:** the backtest — how each Run Edge band actually did, 2023–25 (fitted) and 2026 (out of sample), with the old Run Edge for comparison.
 - **Footer** (collapsed): Run Edge definition, notes, filters, qualifiers, sources and the validation checks.
 
 Each week file carries every listed RB and all 32 defenses per season (`players`, `pool`), so the page scores any pairing in the browser (`src/edge.ts`) with the same formula as the pipeline. The tests check it reproduces every pipeline edge exactly.
@@ -225,6 +250,6 @@ Each row's season block is self-contained (`pipeline/matchups/weekly.py`, types 
   - seasons are labeled and never mixed
   - shares sum to 100%
   - rusher rows sum to the team total
-  - the browser's Run Edge (`src/edge.ts`, used by the player and defense pages) matches the pipeline's on every row and split
-  - edges are within 0–100
+  - the browser's Run Edge, multiplier and projection (`src/edge.ts`, used by the player and defense pages) match the pipeline's on every row
+  - Run Edges are within 0–100; splits carry no edge
   - every rank is within its peer group

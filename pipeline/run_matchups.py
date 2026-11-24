@@ -24,6 +24,7 @@ from matchups.config import OUTPUT_DIR, SCHEMA_VERSION, SEASON_TYPE  # noqa: E40
 from matchups.validate import ValidationError, check_pbp_complete, check_report, pfr_complete_weeks, reconcile_pfr, reconcile_removed, reconcile_team_totals  # noqa: E402
 from matchups.datasuite import DataSuiteError, extra_note, pick_rushing_export, pick_team_defense  # noqa: E402
 from matchups.logos import ensure_logos  # noqa: E402
+from matchups.model import vegas_table  # noqa: E402
 from matchups.weekly import week_report  # noqa: E402
 from matchups.window import build_window, completed_weeks_before  # noqa: E402
 
@@ -136,7 +137,8 @@ def main() -> int:
             print(f"  week {week}: Data Suite rushing export {pick['file'].name}" + (f" (+{len(pick['extra'])} later game(s))" if pick["extra"] else ""))
         rep = week_report(season, week, game_rows, cur, prior, depth,
                           checks + ["Report: direction / gap / box shares sum to 100% for every offense and defense; rusher rows sum to the team total."],
-                          scheme_pick=pick, scheme_note=extra_note(pick, sched), td_picks=td)
+                          scheme_pick=pick, scheme_note=extra_note(pick, sched), td_picks=td,
+                          vegas=vegas_table(load.schedule(season), week))
         check_report(rep)
         path = out_dir / f"week-{week:02d}.json"
         # Keep the existing file when nothing but the timestamp would change, so a scheduled run with
