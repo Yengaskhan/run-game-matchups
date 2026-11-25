@@ -1,5 +1,5 @@
 {
- "generated_at": "2026-11-24T23:17Z",
+ "generated_at": "2026-11-25T19:46Z",
  "model": {
   "k_games": 3,
   "w_sr": 0.51,
@@ -10,9 +10,9 @@
   "min_att": 25
  },
  "refit_train": {
-  "w_sr": 0.51,
-  "w_ypc": 0.48,
-  "w_vegas": 0.35,
+  "w_sr": 0.2,
+  "w_ypc": 0.64,
+  "w_vegas": 0.37,
   "n": 1180
  },
  "method": [
@@ -25,71 +25,71 @@
  "train": {
   "label": "2023\u20132025 (fitted)",
   "n": 1180,
-  "rho": 0.159,
-  "rho_old": 0.023,
+  "rho": 0.15,
+  "rho_old": 0.018,
   "n_old": 1178,
   "bands": [
    {
     "key": "big_edge",
     "label": "Big edge",
-    "n": 274,
-    "actual": 0.1781,
-    "pred": 0.1185
+    "n": 262,
+    "actual": 0.1551,
+    "pred": 0.1196
    },
    {
     "key": "small_edge",
     "label": "Small edge",
-    "n": 169,
-    "actual": 0.0002,
+    "n": 180,
+    "actual": 0.0283,
     "pred": 0.0401
    },
    {
     "key": "neutral",
     "label": "Neutral",
-    "n": 213,
-    "actual": 0.0438,
-    "pred": -0.0006
+    "n": 202,
+    "actual": 0.0214,
+    "pred": -0.0003
    },
    {
     "key": "small_disadvantage",
     "label": "Small disadvantage",
-    "n": 165,
-    "actual": -0.0503,
-    "pred": -0.0386
+    "n": 184,
+    "actual": 0.0145,
+    "pred": -0.0379
    },
    {
     "key": "big_disadvantage",
     "label": "Big disadvantage",
-    "n": 359,
-    "actual": -0.0936,
-    "pred": -0.1155
+    "n": 352,
+    "actual": -0.1036,
+    "pred": -0.113
    }
   ],
   "fifths": [
    {
     "n": 236,
-    "actual": -0.1098,
-    "pred": -0.1379
+    "actual": -0.0803,
+    "pred": -0.1337
    },
    {
     "n": 236,
-    "actual": -0.0524,
-    "pred": -0.0588
+    "actual": -0.0617,
+    "pred": -0.0572
    },
    {
     "n": 236,
-    "actual": 0.0086,
-    "pred": -0.0088
+    "actual": 0.0218,
+    "pred": -0.0099
    },
    {
     "n": 236,
-    "actual": 0.0489,
-    "pred": 0.0419
+    "actual": 0.0168,
+    "pred": 0.0403
    },
    {
     "n": 236,
-    "actual": 0.1735,
-    "pred": 0.1267
+    "actual": 0.1721,
+    "pred": 0.1255
    }
   ]
  },
@@ -167,211 +167,211 @@
  "seasons": {
   "2023": {
    "n": 396,
-   "rho": 0.196,
-   "rho_old": 0.011,
+   "rho": 0.183,
+   "rho_old": 0.015,
    "n_old": 396,
    "bands": [
     {
      "key": "big_edge",
      "label": "Big edge",
-     "n": 82,
-     "actual": 0.2118,
-     "pred": 0.1184
+     "n": 78,
+     "actual": 0.1769,
+     "pred": 0.121
     },
     {
      "key": "small_edge",
      "label": "Small edge",
-     "n": 51,
-     "actual": 0.0466,
-     "pred": 0.0397
+     "n": 52,
+     "actual": 0.0687,
+     "pred": 0.0378
     },
     {
      "key": "neutral",
      "label": "Neutral",
      "n": 71,
-     "actual": -0.0216,
-     "pred": 0.0002
+     "actual": -0.0431,
+     "pred": -0.0003
     },
     {
      "key": "small_disadvantage",
      "label": "Small disadvantage",
-     "n": 65,
-     "actual": -0.0991,
-     "pred": -0.0396
+     "n": 70,
+     "actual": -0.0372,
+     "pred": -0.0385
     },
     {
      "key": "big_disadvantage",
      "label": "Big disadvantage",
-     "n": 127,
-     "actual": -0.1081,
-     "pred": -0.1088
+     "n": 125,
+     "actual": -0.1094,
+     "pred": -0.1058
     }
    ],
    "fifths": [
     {
      "n": 79,
-     "actual": -0.0465,
-     "pred": -0.1303
-    },
-    {
-     "n": 79,
-     "actual": -0.181,
-     "pred": -0.0638
+     "actual": -0.0533,
+     "pred": -0.1251
     },
     {
      "n": 78,
-     "actual": -0.0135,
-     "pred": -0.0181
+     "actual": -0.1448,
+     "pred": -0.0624
     },
     {
      "n": 80,
-     "actual": -0.0128,
-     "pred": 0.0315
+     "actual": -0.0916,
+     "pred": -0.0193
+    },
+    {
+     "n": 79,
+     "actual": 0.0869,
+     "pred": 0.0279
     },
     {
      "n": 80,
-     "actual": 0.2261,
-     "pred": 0.1198
+     "actual": 0.1752,
+     "pred": 0.1195
     }
    ]
   },
   "2024": {
    "n": 391,
-   "rho": 0.187,
-   "rho_old": 0.097,
+   "rho": 0.179,
+   "rho_old": 0.094,
    "n_old": 391,
    "bands": [
     {
      "key": "big_edge",
      "label": "Big edge",
-     "n": 97,
-     "actual": 0.1533,
-     "pred": 0.1143
+     "n": 93,
+     "actual": 0.1281,
+     "pred": 0.115
     },
     {
      "key": "small_edge",
      "label": "Small edge",
-     "n": 72,
-     "actual": 0.0084,
-     "pred": 0.0397
+     "n": 69,
+     "actual": 0.0808,
+     "pred": 0.0418
     },
     {
      "key": "neutral",
      "label": "Neutral",
-     "n": 70,
-     "actual": 0.0162,
-     "pred": -0.0039
+     "n": 66,
+     "actual": -0.009,
+     "pred": -0.0005
     },
     {
      "key": "small_disadvantage",
      "label": "Small disadvantage",
-     "n": 53,
-     "actual": -0.0537,
-     "pred": -0.0382
+     "n": 66,
+     "actual": -0.0374,
+     "pred": -0.0365
     },
     {
      "key": "big_disadvantage",
      "label": "Big disadvantage",
-     "n": 99,
-     "actual": -0.158,
-     "pred": -0.1153
+     "n": 97,
+     "actual": -0.168,
+     "pred": -0.1101
     }
    ],
    "fifths": [
     {
      "n": 78,
-     "actual": -0.1926,
-     "pred": -0.1283
+     "actual": -0.1941,
+     "pred": -0.1206
     },
     {
      "n": 78,
-     "actual": -0.0488,
-     "pred": -0.045
+     "actual": -0.0484,
+     "pred": -0.0452
     },
     {
-     "n": 77,
-     "actual": 0.0099,
-     "pred": 0.0011
+     "n": 78,
+     "actual": 0.0394,
+     "pred": -0.001
+    },
+    {
+     "n": 78,
+     "actual": 0.0063,
+     "pred": 0.0475
     },
     {
      "n": 79,
-     "actual": 0.0465,
-     "pred": 0.0484
-    },
-    {
-     "n": 79,
-     "actual": 0.1585,
-     "pred": 0.1247
+     "actual": 0.1706,
+     "pred": 0.1235
     }
    ]
   },
   "2025": {
    "n": 393,
-   "rho": 0.098,
-   "rho_old": -0.05,
+   "rho": 0.093,
+   "rho_old": -0.062,
    "n_old": 391,
    "bands": [
     {
      "key": "big_edge",
      "label": "Big edge",
-     "n": 95,
-     "actual": 0.1742,
-     "pred": 0.1228
+     "n": 91,
+     "actual": 0.1641,
+     "pred": 0.1231
     },
     {
      "key": "small_edge",
      "label": "Small edge",
-     "n": 46,
-     "actual": -0.0641,
-     "pred": 0.0412
+     "n": 59,
+     "actual": -0.0687,
+     "pred": 0.0402
     },
     {
      "key": "neutral",
      "label": "Neutral",
-     "n": 72,
-     "actual": 0.1351,
-     "pred": 0.0018
+     "n": 65,
+     "actual": 0.1226,
+     "pred": -0.0002
     },
     {
      "key": "small_disadvantage",
      "label": "Small disadvantage",
-     "n": 47,
-     "actual": 0.0211,
-     "pred": -0.0375
+     "n": 48,
+     "actual": 0.1611,
+     "pred": -0.0388
     },
     {
      "key": "big_disadvantage",
      "label": "Big disadvantage",
-     "n": 133,
-     "actual": -0.0319,
+     "n": 130,
+     "actual": -0.05,
      "pred": -0.1221
     }
    ],
    "fifths": [
     {
      "n": 79,
-     "actual": -0.0405,
-     "pred": -0.1516
+     "actual": -0.0256,
+     "pred": -0.1525
     },
     {
      "n": 78,
-     "actual": 0.0364,
-     "pred": -0.0685
+     "actual": -0.0185,
+     "pred": -0.065
     },
     {
      "n": 79,
-     "actual": 0.0473,
-     "pred": -0.0107
+     "actual": 0.1706,
+     "pred": -0.0097
     },
     {
      "n": 78,
-     "actual": 0.0487,
-     "pred": 0.0422
+     "actual": -0.0509,
+     "pred": 0.043
     },
     {
      "n": 79,
-     "actual": 0.1633,
-     "pred": 0.1337
+     "actual": 0.1776,
+     "pred": 0.1312
     }
    ]
   },
