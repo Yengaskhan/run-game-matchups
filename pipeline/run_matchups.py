@@ -29,8 +29,38 @@ from matchups.weekly import week_report  # noqa: E402
 from matchups.window import build_window, completed_weeks_before  # noqa: E402
 
 
-def rb_depth(season: int, gameday: str, played: bool) -> dict[str, list[dict]]:
-    """RBs on each team's depth chart: the last snapshot before kickoff day for a played game, else the latest."""
+# nflverse weekly roster status codes that mean a player can't play: injured reserve, practice squad,
+# released, retired, exempt, suspended. Depth charts can lag these moves, so they're checked separately.
+ROSTER_OUT = {"RES", "DEV", "CUT", "RET", "EXE", "SUS"}
+_REPORTED: set[str] = set()
+
+
+def unavailable_rbs(season: int, week: int) -> dict[str, str]:
+    """gsis_id -> reason, for players who can't play this week: on a reserve/inactive roster list (latest
+    nflverse weekly roster up to this week) or ruled Out on this week's injury report."""
+    import nflreadpy as nfl
+
+    out: dict[str, str] = {}
+    try:
+        ro = nfl.load_rosters_weekly([season]).filter(pl.col("week") <= week).sort("week")
+        for r in ro.group_by("gsis_id").agg(pl.col("status").last()).iter_rows(named=True):
+            if r["status"] in ROSTER_OUT:
+                out[r["gsis_id"]] = f"roster status {r['status']}"
+    except Exception as e:
+        print(f"Roster status unavailable: {e}")
+    try:
+        inj = nfl.load_injuries([season]).filter((pl.col("week") == week) & (pl.col("report_status") == "Out"))
+        for gid in inj["gsis_id"].drop_nulls().to_list():
+            out.setdefault(gid, "Out on the injury report")
+    except Exception as e:
+        print(f"Injury report unavailable: {e}")
+    return out
+
+
+def rb_depth(season: int, gameday: str, played: bool, unavailable: dict[str, str] | None = None) -> dict[str, list[dict]]:
+    """RBs on each team's depth chart: the last snapshot before kickoff day for a played game, else the latest.
+    For an upcoming game, RBs who can't play (injured reserve, ruled Out, ...) are dropped and the rest
+    move up, so the starter is the top RB who can actually play."""
     dc = load.depth_charts(season).with_columns(pl.col("dt").str.slice(0, 10).alias("day"))
     if played:
         dc = dc.filter(pl.col("day") < gameday)
@@ -38,7 +68,13 @@ def rb_depth(season: int, gameday: str, played: bool) -> dict[str, list[dict]]:
     rb = dc.join(latest, on=["team", "dt"]).filter(pl.col("pos_abb") == "RB", pl.col("gsis_id").is_not_null()).sort(["team", "pos_rank"]).unique(["team", "gsis_id"], keep="first", maintain_order=True)
     out: dict[str, list[dict]] = {}
     for r in rb.iter_rows(named=True):
-        out.setdefault(r["team"], []).append({"gsis_id": r["gsis_id"], "name": r["player_name"], "pos_rank": r["pos_rank"]})
+        if not played and unavailable and r["gsis_id"] in unavailable:
+            if r["gsis_id"] not in _REPORTED:
+                _REPORTED.add(r["gsis_id"])
+                print(f"  {r['team']}: {r['player_name']} left off the RB depth chart ({unavailable[r['gsis_id']]})")
+            continue
+        lst = out.setdefault(r["team"], [])
+        lst.append({"gsis_id": r["gsis_id"], "name": r["player_name"], "pos_rank": len(lst) + 1})
     return out
 
 
@@ -118,7 +154,8 @@ def main() -> int:
         out_dir = args.out / str(season)
         out_dir.mkdir(parents=True, exist_ok=True)
         game_rows = list(games.iter_rows(named=True))
-        depth = {g["game_id"]: rb_depth(season, g["gameday"], g["result"] is not None) for g in game_rows}
+        unavailable = unavailable_rbs(season, week) if any(g["result"] is None for g in game_rows) else {}
+        depth = {g["game_id"]: rb_depth(season, g["gameday"], g["result"] is not None, unavailable) for g in game_rows}
         window_games = set(sched.filter(pl.col("week").is_in(weeks), pl.col("result").is_not_null())["game_id"].to_list())
         try:
             pick = pick_rushing_export(sched, window_games, week) if weeks else {"status": "No games played yet this season."}
